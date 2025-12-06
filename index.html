@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nobar Private Vercel</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            text-align: center;
+        }
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 12px;
+        }
+        input {
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: white;
+            width: 200px;
+        }
+        button {
+            padding: 10px 20px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        .btn-primary { background-color: #3b82f6; color: white; }
+        .btn-primary:hover { background-color: #2563eb; }
+        .btn-success { background-color: #22c55e; color: white; }
+        .btn-danger { background-color: #ef4444; color: white; }
+        
+        #myIdDisplay {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #94a3b8;
+        }
+        .status {
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #fbbf24;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🎬 Nobar Bareng Pasangan (P2P)</h2>
+    <div id="status" class="status">Menunggu inisialisasi...</div>
+
+    <div class="video-wrapper">
+        <video id="remoteVideo" autoplay playsinline></video>
+    </div>
+
+    <div class="controls">
+        <div id="connectionPanel">
+            <input type="text" id="partnerIdInput" placeholder="Masukkan ID Pasangan">
+            <button onclick="connectToPartner()" class="btn-primary">Hubungkan</button>
+        </div>
+
+        <button onclick="startScreenShare()" class="btn-success">🖥️ Share Screen & Audio</button>
+    </div>
+
+    <div id="myIdDisplay">ID Kamu: <span id="myId" style="color:white; font-weight:bold;">Generating...</span></div>
+</div>
+
+<script>
+    const statusEl = document.getElementById('status');
+    const myIdEl = document.getElementById('myId');
+    const remoteVideo = document.getElementById('remoteVideo');
+    
+    // Inisialisasi PeerJS
+    // Menggunakan server cloud PeerJS gratis (cukup untuk 2 orang)
+    const peer = new Peer(undefined, {
+        debug: 2
+    });
+
+    let myStream = null;
+    let conn = null;
+
+    // 1. Saat Peer siap dan mendapat ID unik
+    peer.on('open', (id) => {
+        myIdEl.innerText = id;
+        statusEl.innerText = "Siap! Berikan ID Kamu ke pasangan atau masukkan ID pasangan.";
+    });
+
+    // 2. Jika ada yang menelepon (Pasangan connect ke kita)
+    peer.on('call', (call) => {
+        // Jawab panggilan (kita tidak perlu kirim stream dulu, nanti share screen manual)
+        call.answer(); 
+        
+        call.on('stream', (remoteStream) => {
+            // Tampilkan stream lawan (jika dia share screen)
+            remoteVideo.srcObject = remoteStream;
+        });
+        
+        statusEl.innerText = "Terhubung dengan pasangan!";
+        statusEl.style.color = "#22c55e";
+    });
+
+    // 3. Fungsi menghubungkan ke pasangan (Caller)
+    function connectToPartner() {
+        const partnerId = document.getElementById('partnerIdInput').value;
+        if (!partnerId) return alert("Masukkan ID pasangan dulu!");
+
+        statusEl.innerText = "Menghubungi...";
+        
+        // Kita telepon dia. Awalnya kirim dummy stream atau kosong
+        // Di sini kita inisiasi koneksi data dulu agar stabil
+        const conn = peer.connect(partnerId);
+        
+        conn.on('open', () => {
+            statusEl.innerText = "Terhubung dengan pasangan!";
+            statusEl.style.color = "#22c55e";
+        });
+    }
+
+    // 4. Fungsi Share Screen
+    async function startScreenShare() {
+        try {
+            // Meminta akses layar + Audio Sistem
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                    cursor: "always",
+                    frameRate: 30 // FPS stabil
+                },
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                } // PENTING: Agar suara film ikut masuk
+            });
+
+            myStream = stream;
+            
+            // Tampilkan di layar sendiri (opsional, buat preview kecil)
+            // remoteVideo.srcObject = stream; 
+
+            // Kirim stream ke semua koneksi aktif
+            // Karena PeerJS simple, kita cari peer yang aktif atau input manual ID lagi jika putus
+            // Cara termudah: Ambil ID input atau tunggu call event.
+            // Di kasus ini, kita asumsikan sudah saling tahu ID.
+            
+            const partnerId = document.getElementById('partnerIdInput').value;
+            // Jika kita yang "Ditelepon", kita butuh ID penelepon. 
+            // Untuk simplifikasi, masukkan ID pasangan masing-masing di kedua sisi.
+            
+            if(partnerId) {
+                const call = peer.call(partnerId, stream);
+                statusEl.innerText = "Sedang membagikan layar...";
+            } else {
+                alert("Mohon masukkan ID pasangan di kolom input agar bisa mengirim layar.");
+            }
+
+            // Jika tombol stop ditekan browser
+            stream.getVideoTracks()[0].onended = () => {
+                statusEl.innerText = "Share screen berhenti.";
+            };
+
+        } catch (err) {
+            console.error("Gagal share screen:", err);
+            alert("Gagal: " + err.message);
+        }
+    }
+</script>
+
+</body>
+</html>
