@@ -108,8 +108,20 @@
     
     // Inisialisasi PeerJS
     // Menggunakan server cloud PeerJS gratis (cukup untuk 2 orang)
+    // GANTI BAGIAN "const peer = ..." YANG LAMA DENGAN INI:
+    
     const peer = new Peer(undefined, {
-        debug: 2
+        debug: 2,
+        config: {
+            iceServers: [
+                // Server STUN Google (Gratis & Stabil) untuk menembus NAT
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+            ]
+        }
     });
 
     let myStream = null;
@@ -153,45 +165,53 @@
     }
 
     // 4. Fungsi Share Screen
+    // GANTI FUNGSI startScreenShare DENGAN INI:
     async function startScreenShare() {
         try {
-            // Meminta akses layar + Audio Sistem
+            const partnerId = document.getElementById('partnerIdInput').value;
+            
+            // Validasi dulu sebelum share
+            if (!partnerId) {
+                alert("Mohon masukkan ID pasangan di kolom input TERLEBIH DAHULU agar koneksi stabil.");
+                return;
+            }
+
+            // Meminta akses layar dengan CONSTRAINT 1080p
             const stream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
                     cursor: "always",
-                    frameRate: 30 // FPS stabil
+                    // Memaksa resolusi 1080p
+                    width: { ideal: 1920, max: 1920, min: 1280 },
+                    height: { ideal: 1080, max: 1080, min: 720 },
+                    // Frame rate 30fps cukup untuk film (60fps akan sangat berat di bandwidth)
+                    frameRate: { ideal: 30, max: 60 }, 
+                    displaySurface: "browser" // Prioritaskan share tab browser
                 },
                 audio: {
                     echoCancellation: false,
                     noiseSuppression: false,
-                    autoGainControl: false
-                } // PENTING: Agar suara film ikut masuk
+                    autoGainControl: false,
+                    sampleRate: 44100
+                }
             });
 
             myStream = stream;
-            
-            // Tampilkan di layar sendiri (opsional, buat preview kecil)
-            // remoteVideo.srcObject = stream; 
+            statusEl.innerText = "Kualitas diset ke 1080p. Menghubungkan video...";
 
-            // Kirim stream ke semua koneksi aktif
-            // Karena PeerJS simple, kita cari peer yang aktif atau input manual ID lagi jika putus
-            // Cara termudah: Ambil ID input atau tunggu call event.
-            // Di kasus ini, kita asumsikan sudah saling tahu ID.
-            
-            const partnerId = document.getElementById('partnerIdInput').value;
-            // Jika kita yang "Ditelepon", kita butuh ID penelepon. 
-            // Untuk simplifikasi, masukkan ID pasangan masing-masing di kedua sisi.
-            
-            if(partnerId) {
-                const call = peer.call(partnerId, stream);
-                statusEl.innerText = "Sedang membagikan layar...";
-            } else {
-                alert("Mohon masukkan ID pasangan di kolom input agar bisa mengirim layar.");
-            }
+            // PENTING: Menambahkan opsi bandwidth agar tidak burik (blocky)
+            const call = peer.call(partnerId, stream, {
+                metadata: { type: 'screen-share' }
+            });
 
-            // Jika tombol stop ditekan browser
+            // Hack kecil untuk menjaga koneksi tetap hidup saat bandwidth tinggi
+            call.on('close', () => {
+                statusEl.innerText = "Share screen berhenti.";
+            });
+            
+            // Jika tombol stop bawaan browser ditekan
             stream.getVideoTracks()[0].onended = () => {
                 statusEl.innerText = "Share screen berhenti.";
+                call.close();
             };
 
         } catch (err) {
@@ -199,6 +219,16 @@
             alert("Gagal: " + err.message);
         }
     }
+    // Klik 2x pada video untuk Fullscreen
+    remoteVideo.addEventListener('dblclick', () => {
+        if (remoteVideo.requestFullscreen) {
+            remoteVideo.requestFullscreen();
+        } else if (remoteVideo.webkitRequestFullscreen) { /* Safari */
+            remoteVideo.webkitRequestFullscreen();
+        } else if (remoteVideo.msRequestFullscreen) { /* IE11 */
+            remoteVideo.msRequestFullscreen();
+        }
+    });
 </script>
 
 </body>
