@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Video, VideoOff, Mic, MicOff, Monitor, MonitorOff, PhoneOff, Copy, Check, Users, Heart, Maximize, Settings, X, Wifi, WifiOff } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, Monitor, MonitorOff, PhoneOff, Copy, Check, Users, Heart, Maximize, Settings, X, Wifi, WifiOff, Share } from 'lucide-react';
 
 const WatchParty = () => {
   const [peerId, setPeerId] = useState('');
@@ -20,9 +20,9 @@ const WatchParty = () => {
   const [videoQuality, setVideoQuality] = useState('540p');
   const [frameRate, setFrameRate] = useState(15);
   const [networkQuality, setNetworkQuality] = useState('good');
-  const [iceServers, setIceServers] = useState([]);
   const [localSdp, setLocalSdp] = useState('');
   const [remoteSdp, setRemoteSdp] = useState('');
+  const [isInitiator, setIsInitiator] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -63,8 +63,37 @@ const WatchParty = () => {
     }
   };
 
-  // Get fast ICE servers
-  const getFastIceServers = useCallback(() => {
+  // Fungsi untuk membersihkan SDP dari atribut yang tidak valid
+  const cleanSdp = (sdp) => {
+    if (!sdp) return '';
+
+    // Hapus baris yang mengandung atribut yang tidak valid
+    const lines = sdp.split('\n');
+    const validLines = lines.filter(line => {
+      // Hapus baris dengan atribut yang tidak dikenali
+      if (line.startsWith('a=max-message-size')) return false;
+      if (line.startsWith('a=extmap-allow-mixed')) return false;
+      if (line.startsWith('a=msid-semantic')) return false;
+      // Simpan baris lainnya
+      return true;
+    });
+
+    // Gabungkan kembali dan tambahkan baris yang diperlukan
+    let cleanedSdp = validLines.join('\n');
+
+    // Pastikan ada baris dasar yang diperlukan
+    if (!cleanedSdp.includes('m=audio')) {
+      cleanedSdp += '\nm=audio 9 UDP/TLS/RTP/SAVPF 111';
+    }
+    if (!cleanedSdp.includes('m=video')) {
+      cleanedSdp += '\nm=video 9 UDP/TLS/RTP/SAVPF 96';
+    }
+
+    return cleanedSdp;
+  };
+
+  // Get ICE servers
+  const getIceServers = useCallback(() => {
     return [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
@@ -76,21 +105,16 @@ const WatchParty = () => {
   }, []);
 
   // Create peer connection
-  const createPeerConnection = useCallback(async (isOfferer = false) => {
+  const createPeerConnection = useCallback(() => {
     try {
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
       }
 
-      const servers = getFastIceServers();
-      setIceServers(servers);
-
       const config = {
-        iceServers: servers,
+        iceServers: getIceServers(),
         iceTransportPolicy: 'all',
         iceCandidatePoolSize: 5,
-        bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require'
       };
 
       const pc = new RTCPeerConnection(config);
@@ -99,18 +123,18 @@ const WatchParty = () => {
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log('New ICE candidate:', event.candidate);
+          console.log('ICE candidate:', event.candidate);
         }
       };
 
       // Handle connection state
       pc.oniceconnectionstatechange = () => {
-        console.log('ICE connection state:', pc.iceConnectionState);
+        console.log('ICE state:', pc.iceConnectionState);
         switch (pc.iceConnectionState) {
           case 'connected':
           case 'completed':
             setCallActive(true);
-            setConnectionStatus('✅ Connected (P2P)');
+            setConnectionStatus('✅ Connected!');
             setTimeout(() => setConnectionStatus(''), 3000);
             break;
           case 'disconnected':
@@ -123,54 +147,37 @@ const WatchParty = () => {
 
       // Handle incoming tracks
       pc.ontrack = (event) => {
-        console.log('Received remote track:', event.track.kind);
+        console.log('Received track:', event.track.kind);
         if (event.streams && event.streams[0]) {
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = event.streams[0];
+          if (event.track.kind === 'video') {
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.srcObject = event.streams[0];
+            }
           }
         }
       };
 
-      // Handle data channel
-      if (isOfferer) {
-        const dc = pc.createDataChannel('watchparty');
-        setupDataChannel(dc);
-      } else {
-        pc.ondatachannel = (event) => {
-          setupDataChannel(event.channel);
-        };
-      }
+      // Handle negotiation needed
+      pc.onnegotiationneeded = async () => {
+        console.log('Negotiation needed');
+        if (isInitiator) {
+          await createAndSendOffer();
+        }
+      };
 
       return pc;
     } catch (err) {
       console.error('Error creating peer connection:', err);
-      setError('Failed to create connection: ' + err.message);
+      setError('Failed to create connection');
       return null;
     }
-  }, [getFastIceServers]);
+  }, [getIceServers, isInitiator]);
 
-  const setupDataChannel = (dc) => {
-    dataChannelRef.current = dc;
-    dc.onopen = () => {
-      console.log('Data channel opened');
-    };
-    dc.onmessage = (event) => {
-      console.log('Data channel message:', event.data);
-    };
-  };
-
-  // Create offer
-  const createOffer = useCallback(async () => {
+  // Create and send offer
+  const createAndSendOffer = useCallback(async () => {
     try {
-      const pc = await createPeerConnection(true);
-      if (!pc) return null;
-
-      // Add local stream if available
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => {
-          pc.addTrack(track, localStreamRef.current);
-        });
-      }
+      const pc = peerConnectionRef.current;
+      if (!pc) return;
 
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
@@ -179,165 +186,109 @@ const WatchParty = () => {
 
       await pc.setLocalDescription(offer);
 
-      // Optimize SDP for screen sharing
-      const optimizedSdp = optimizeSdp(offer.sdp, isScreenSharing);
-      const optimizedOffer = new RTCSessionDescription({
-        type: 'offer',
-        sdp: optimizedSdp
-      });
+      // Clean SDP before displaying
+      const cleanedSdp = cleanSdp(pc.localDescription.sdp);
+      setLocalSdp(cleanedSdp);
 
-      await pc.setLocalDescription(optimizedOffer);
-
-      return pc.localDescription.sdp;
+      setConnectionStatus('✅ Offer created - Copy and send to partner');
     } catch (err) {
       console.error('Error creating offer:', err);
       setError('Failed to create offer: ' + err.message);
-      return null;
     }
-  }, [createPeerConnection, isScreenSharing]);
+  }, []);
 
   // Create answer
-  const createAnswer = useCallback(async (offerSdp) => {
+  const createAndSendAnswer = useCallback(async () => {
     try {
-      const pc = await createPeerConnection(false);
-      if (!pc) return null;
-
-      // Add local stream if available
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => {
-          pc.addTrack(track, localStreamRef.current);
-        });
-      }
-
-      await pc.setRemoteDescription(new RTCSessionDescription({
-        type: 'offer',
-        sdp: offerSdp
-      }));
+      const pc = peerConnectionRef.current;
+      if (!pc) return;
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      // Optimize SDP
-      const optimizedSdp = optimizeSdp(answer.sdp, isScreenSharing);
-      const optimizedAnswer = new RTCSessionDescription({
-        type: 'answer',
-        sdp: optimizedSdp
-      });
+      // Clean SDP before displaying
+      const cleanedSdp = cleanSdp(pc.localDescription.sdp);
+      setLocalSdp(cleanedSdp);
 
-      await pc.setLocalDescription(optimizedAnswer);
-
-      return pc.localDescription.sdp;
+      setConnectionStatus('✅ Answer created - Copy and send back');
     } catch (err) {
       console.error('Error creating answer:', err);
       setError('Failed to create answer: ' + err.message);
-      return null;
-    }
-  }, [createPeerConnection, isScreenSharing]);
-
-  // Optimize SDP for performance
-  const optimizeSdp = (sdp, forScreenSharing = false) => {
-    let modifiedSdp = sdp;
-
-    // Set bandwidth limits
-    const quality = qualityPresets[videoQuality];
-    modifiedSdp = modifiedSdp.replace(/a=mid:video\r\n/g,
-      `a=mid:video\r\nb=AS:${quality.bitrate}\r\nb=TIAS:${quality.bitrate}\r\n`);
-
-    // Prioritize H.264 for screen sharing
-    if (forScreenSharing) {
-      modifiedSdp = modifiedSdp.replace(/a=rtpmap:(\d+) H264\/90000\r\n/g,
-        (match, p1) => `a=rtpmap:${p1} H264/90000\r\na=fmtp:${p1} profile-level-id=42e01f;level-asymmetry-allowed=1;packetization-mode=1\r\n`);
-    }
-
-    return modifiedSdp;
-  };
-
-  // Add ICE candidate
-  const addIceCandidate = useCallback(async (candidate) => {
-    if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
-      try {
-        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (err) {
-        console.error('Error adding ICE candidate:', err);
-      }
     }
   }, []);
 
-  // Initialize peer
-  const initializePeer = useCallback(() => {
-    if (!selectedName) {
-      setError('Please select your name first!');
-      return;
+  // Initialize as initiator
+  const startAsInitiator = useCallback(async () => {
+    setIsInitiator(true);
+    setConnectionStatus('Starting as initiator...');
+
+    const pc = createPeerConnection();
+    if (!pc) return;
+
+    // Add empty stream for connection
+    if (!localStreamRef.current) {
+      localStreamRef.current = new MediaStream();
     }
 
-    cleanup();
-    setConnectionStatus('Setting up P2P connection...');
-    setError('');
+    // Wait a bit before creating offer
+    setTimeout(async () => {
+      await createAndSendOffer();
+    }, 1000);
+  }, [createPeerConnection, createAndSendOffer]);
 
-    const id = `watchparty-${selectedName}-${Date.now()}`;
-    setPeerId(id);
-    setUserName(names[selectedName]);
+  // Initialize as receiver
+  const startAsReceiver = useCallback(() => {
+    setIsInitiator(false);
+    setConnectionStatus('Waiting for offer from initiator...');
+    createPeerConnection();
+  }, [createPeerConnection]);
 
-    // Create empty stream for connection
-    localStreamRef.current = new MediaStream();
-
-    setIsConnected(true);
-    setConnectionStatus('✅ Ready to connect');
-    setTimeout(() => setConnectionStatus(''), 2000);
-  }, [selectedName]);
-
-  // Connect using SDP exchange (copy-paste method)
-  const connectViaSdp = useCallback(async () => {
-    if (!inputPeerId) {
-      setError('Please enter the offer SDP');
-      return;
-    }
-
-    try {
-      setConnectionStatus('Creating answer...');
-      const answerSdp = await createAnswer(inputPeerId);
-      if (answerSdp) {
-        setLocalSdp(answerSdp);
-        setConnectionStatus('✅ Answer created - Copy and send to partner');
-      }
-    } catch (err) {
-      setError('Failed to create connection: ' + err.message);
-    }
-  }, [inputPeerId, createAnswer]);
-
-  // Start call as offerer
-  const startCall = useCallback(async () => {
-    try {
-      setConnectionStatus('Creating offer...');
-      const offerSdp = await createOffer();
-      if (offerSdp) {
-        setLocalSdp(offerSdp);
-        setConnectionStatus('✅ Offer created - Send to partner');
-      }
-    } catch (err) {
-      setError('Failed to start call: ' + err.message);
-    }
-  }, [createOffer]);
-
-  // Apply remote SDP
+  // Apply remote SDP (offer or answer)
   const applyRemoteSdp = useCallback(async () => {
-    if (!remoteSdp) {
+    if (!remoteSdp.trim()) {
       setError('Please enter remote SDP');
       return;
     }
 
     try {
-      if (peerConnectionRef.current) {
-        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription({
-          type: remoteSdp.includes('a=sendrecv') ? 'offer' : 'answer',
-          sdp: remoteSdp
-        }));
-        setConnectionStatus('✅ Remote SDP applied');
+      const pc = peerConnectionRef.current;
+      if (!pc) {
+        setError('Please initialize connection first');
+        return;
       }
+
+      // Clean the SDP before using
+      const cleanedSdp = cleanSdp(remoteSdp);
+
+      // Determine SDP type
+      const isOffer = cleanedSdp.includes('a=sendrecv') || cleanedSdp.includes('o=-');
+
+      const sdpType = isOffer ? 'offer' : 'answer';
+      console.log('Applying remote SDP as:', sdpType);
+
+      const remoteDesc = new RTCSessionDescription({
+        type: sdpType,
+        sdp: cleanedSdp
+      });
+
+      await pc.setRemoteDescription(remoteDesc);
+
+      setConnectionStatus(`✅ Remote ${sdpType} applied successfully`);
+
+      // If we received an offer and we're not the initiator, create answer
+      if (sdpType === 'offer' && !isInitiator) {
+        setTimeout(async () => {
+          await createAndSendAnswer();
+        }, 1000);
+      }
+
+      // Clear remote SDP field
+      setRemoteSdp('');
     } catch (err) {
+      console.error('Error applying remote SDP:', err);
       setError('Failed to apply remote SDP: ' + err.message);
     }
-  }, [remoteSdp]);
+  }, [remoteSdp, isInitiator, createAndSendAnswer]);
 
   // Optimized screen sharing
   const toggleScreenShare = useCallback(async () => {
@@ -350,53 +301,36 @@ const WatchParty = () => {
       try {
         const quality = qualityPresets[videoQuality];
 
+        // Get screen stream
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
-            width: { ideal: quality.width, max: quality.width },
-            height: { ideal: quality.height, max: quality.height },
-            frameRate: { ideal: frameRate, max: frameRate },
-            displaySurface: 'monitor'
+            width: { ideal: quality.width },
+            height: { ideal: quality.height },
+            frameRate: { ideal: frameRate }
           },
           audio: false
         });
 
         const videoTrack = stream.getVideoTracks()[0];
 
-        // Apply constraints for optimal performance
-        await videoTrack.applyConstraints({
-          width: { ideal: quality.width },
-          height: { ideal: quality.height },
-          frameRate: { ideal: frameRate },
-          bitrate: quality.bitrate
-        });
+        // Get existing senders
+        const pc = peerConnectionRef.current;
+        const senders = pc.getSenders();
 
-        // Replace video track in peer connection
-        const senders = peerConnectionRef.current.getSenders();
-        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        // Find video sender or create new one
+        let videoSender = senders.find(s => s.track && s.track.kind === 'video');
 
         if (videoSender) {
-          videoSender.replaceTrack(videoTrack);
+          // Replace existing video track
+          await videoSender.replaceTrack(videoTrack);
         } else {
-          peerConnectionRef.current.addTrack(videoTrack, stream);
+          // Add new video track
+          pc.addTrack(videoTrack, stream);
         }
 
+        // Display screen on local element
         if (screenVideoRef.current) {
           screenVideoRef.current.srcObject = stream;
-        }
-
-        // Optimize sender parameters
-        if (videoSender) {
-          const params = videoSender.getParameters();
-          if (!params.encodings) {
-            params.encodings = [{}];
-          }
-          params.encodings[0] = {
-            ...params.encodings[0],
-            maxBitrate: quality.bitrate,
-            priority: quality.priority,
-            scaleResolutionDownBy: 1
-          };
-          videoSender.setParameters(params);
         }
 
         // Handle screen share stop
@@ -407,7 +341,7 @@ const WatchParty = () => {
         screenStreamRef.current = stream;
         setIsScreenSharing(true);
 
-        setConnectionStatus(`📺 Screen: ${videoQuality} @ ${frameRate}fps`);
+        setConnectionStatus(`📺 Screen sharing: ${videoQuality} @ ${frameRate}fps`);
         setTimeout(() => setConnectionStatus(''), 3000);
 
       } catch (err) {
@@ -605,6 +539,29 @@ const WatchParty = () => {
     setTimeout(() => setCopied(false), 2000);
   }, []);
 
+  // Initialize peer
+  const initializePeer = useCallback(() => {
+    if (!selectedName) {
+      setError('Please select your name first!');
+      return;
+    }
+
+    cleanup();
+    setConnectionStatus('Setting up P2P connection...');
+    setError('');
+
+    const id = `watchparty-${selectedName}-${Date.now()}`;
+    setPeerId(id);
+    setUserName(names[selectedName]);
+
+    // Create empty stream for connection
+    localStreamRef.current = new MediaStream();
+
+    setIsConnected(true);
+    setConnectionStatus('✅ Ready to connect - Choose your role');
+    setTimeout(() => setConnectionStatus(''), 2000);
+  }, [selectedName, cleanup]);
+
   // Initial connection UI
   if (!isConnected) {
     return (
@@ -679,11 +636,9 @@ const WatchParty = () => {
             </div>
             <ol className="text-sm text-blue-100 space-y-3 list-decimal list-inside">
               <li>Select name and click "Start P2P Connection"</li>
-              <li>Click "Create Offer" to generate SDP</li>
-              <li>Copy the SDP and send to your partner</li>
-              <li>Partner pastes it in "Remote SDP" field and clicks "Apply"</li>
-              <li>Partner copies their SDP and sends it back to you</li>
-              <li>Paste partner's SDP in "Remote SDP" and click "Apply"</li>
+              <li>Choose your role (Initiator or Receiver)</li>
+              <li>Copy SDP and send to partner via WhatsApp/Telegram</li>
+              <li>Paste partner's SDP and click "Apply"</li>
               <li>You're connected! Toggle screen share to start</li>
             </ol>
           </div>
@@ -703,14 +658,16 @@ const WatchParty = () => {
               <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center">
                 <Users className="w-6 h-6 text-white" />
               </div>
-              {networkQuality === 'good' && (
+              {callActive && (
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-900"></div>
               )}
             </div>
             <div>
               <h2 className="text-white font-bold text-lg">{userName}</h2>
               <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-400">P2P Mode: Direct</span>
+                <span className="text-sm text-gray-400">
+                  {isInitiator ? '🎯 Initiator' : '🎯 Receiver'}
+                </span>
               </div>
             </div>
           </div>
@@ -845,7 +802,9 @@ const WatchParty = () => {
                 </div>
                 <h3 className="text-xl font-bold text-gray-400 mb-3">No Screen Sharing</h3>
                 <p className="text-gray-600 max-w-md">
-                  Establish connection and click screen share button to start
+                  {callActive
+                    ? 'Click screen share button to start sharing your screen'
+                    : 'Establish connection first to enable screen sharing'}
                 </p>
               </div>
             </div>
@@ -856,83 +815,97 @@ const WatchParty = () => {
         <div className={`w-full bg-gradient-to-b from-gray-900 to-black flex flex-col border-l border-gray-800 ${isFullscreen ? 'hidden' : 'lg:w-96'
           }`}>
           <div className="flex-1 p-5 space-y-5 overflow-y-auto">
-            {/* SDP Exchange Section */}
-            <div className="space-y-4">
-              {!callActive ? (
-                <>
-                  <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-5 border border-gray-700">
-                    <h3 className="text-white font-bold mb-3">🔗 SDP Exchange</h3>
+            {/* Connection Setup Section */}
+            {!callActive ? (
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-5 border border-gray-700">
+                  <h3 className="text-white font-bold mb-4">🔗 Setup Connection</h3>
 
-                    <div className="space-y-4">
-                      <button
-                        onClick={startCall}
-                        className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-700 text-white rounded-xl font-bold hover:shadow-2xl hover:shadow-cyan-500/30 transition-all"
-                      >
-                        Create Offer
-                      </button>
+                  <div className="space-y-3">
+                    <button
+                      onClick={startAsInitiator}
+                      className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-700 text-white rounded-xl font-bold hover:shadow-2xl hover:shadow-cyan-500/30 transition-all flex items-center justify-center space-x-2"
+                    >
+                      <Share className="w-5 h-5" />
+                      <span>Start as Initiator</span>
+                    </button>
 
-                      <button
-                        onClick={connectViaSdp}
-                        className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-700 text-white rounded-xl font-bold hover:shadow-2xl hover:shadow-purple-500/30 transition-all"
-                      >
-                        Create Answer
-                      </button>
-                    </div>
+                    <button
+                      onClick={startAsReceiver}
+                      className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-700 text-white rounded-xl font-bold hover:shadow-2xl hover:shadow-purple-500/30 transition-all flex items-center justify-center space-x-2"
+                    >
+                      <Users className="w-5 h-5" />
+                      <span>Wait as Receiver</span>
+                    </button>
                   </div>
 
-                  {localSdp && (
-                    <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-5 border border-gray-700">
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="text-white font-bold">Your SDP:</h4>
-                        <button
-                          onClick={() => copySdp(localSdp)}
-                          className="flex items-center space-x-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
-                        >
-                          {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-white" />}
-                          <span className="text-white text-sm">Copy</span>
-                        </button>
-                      </div>
+                  <p className="text-xs text-gray-400 mt-3 text-center">
+                    Initiator creates offer, Receiver waits and answers
+                  </p>
+                </div>
+
+                {/* Your SDP */}
+                {localSdp && (
+                  <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-5 border border-gray-700">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-white font-bold">Your SDP to Send:</h4>
+                      <button
+                        onClick={() => copySdp(localSdp)}
+                        className="flex items-center space-x-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+                      >
+                        {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-white" />}
+                        <span className="text-white text-sm">Copy</span>
+                      </button>
+                    </div>
+                    <div className="relative">
                       <textarea
                         value={localSdp}
                         readOnly
                         className="w-full h-32 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-gray-300 text-xs font-mono"
                       />
-                      <p className="text-xs text-gray-500 mt-2">
-                        Send this to your partner
-                      </p>
+                      <div className="absolute bottom-2 right-2 text-xs text-gray-500">
+                        {localSdp.length} chars
+                      </div>
                     </div>
-                  )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      Send this to your partner via WhatsApp/Telegram
+                    </p>
+                  </div>
+                )}
 
-                  <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-5 border border-gray-700">
-                    <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-white font-bold">Remote SDP:</h4>
-                      <button
-                        onClick={applyRemoteSdp}
-                        className="px-4 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg transition"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                    <textarea
-                      value={remoteSdp}
-                      onChange={(e) => setRemoteSdp(e.target.value)}
-                      placeholder="Paste partner's SDP here..."
-                      className="w-full h-32 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs font-mono placeholder-gray-500"
-                    />
+                {/* Remote SDP Input */}
+                <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-5 border border-gray-700">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-white font-bold">Partner's SDP:</h4>
+                    <button
+                      onClick={applyRemoteSdp}
+                      className="px-4 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg transition"
+                    >
+                      Apply
+                    </button>
                   </div>
-                </>
-              ) : (
-                <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 rounded-2xl p-5 border border-green-700">
-                  <div className="flex items-center justify-center space-x-2">
-                    <Wifi className="w-5 h-5 text-green-400" />
-                    <span className="text-green-400 font-bold">P2P Connected!</span>
-                  </div>
-                  <p className="text-sm text-gray-300 text-center mt-2">
-                    Screen sharing is now available
+                  <textarea
+                    value={remoteSdp}
+                    onChange={(e) => setRemoteSdp(e.target.value)}
+                    placeholder="Paste partner's SDP here..."
+                    className="w-full h-32 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs font-mono placeholder-gray-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Paste the SDP you received from your partner
                   </p>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 rounded-2xl p-5 border border-green-700">
+                <div className="flex items-center justify-center space-x-2">
+                  <Wifi className="w-5 h-5 text-green-400" />
+                  <span className="text-green-400 font-bold">P2P Connected!</span>
+                </div>
+                <p className="text-sm text-gray-300 text-center mt-2">
+                  You can now start screen sharing
+                </p>
+              </div>
+            )}
 
             {/* Local Video */}
             <div className="relative bg-gradient-to-br from-gray-900 to-black rounded-2xl overflow-hidden aspect-video border border-gray-800">
@@ -1042,7 +1015,9 @@ const WatchParty = () => {
               <p className="text-xs text-gray-400">
                 {callActive
                   ? `P2P Connected • WebRTC Direct`
-                  : 'Create/Apply SDP to connect'
+                  : isInitiator
+                    ? 'Create offer and send SDP to partner'
+                    : 'Wait for offer from partner'
                 }
               </p>
             </div>
