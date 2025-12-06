@@ -74,6 +74,7 @@ const WatchParty = () => {
       if (line.startsWith('a=max-message-size')) return false;
       if (line.startsWith('a=extmap-allow-mixed')) return false;
       if (line.startsWith('a=msid-semantic')) return false;
+      if (line.includes('a=fmtp:') && line.includes('repair-window')) return false;
       // Simpan baris lainnya
       return true;
     });
@@ -602,10 +603,10 @@ const WatchParty = () => {
                   key={key}
                   onClick={() => setSelectedName(key)}
                   className={`p-5 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 ${selectedName === key
-                      ? key === 'wyan'
-                        ? 'border-blue-400 bg-blue-500/30 shadow-lg shadow-blue-500/30'
-                        : 'border-pink-400 bg-pink-500/30 shadow-lg shadow-pink-500/30'
-                      : 'border-white/30 bg-white/5 hover:border-white/50'
+                    ? key === 'wyan'
+                      ? 'border-blue-400 bg-blue-500/30 shadow-lg shadow-blue-500/30'
+                      : 'border-pink-400 bg-pink-500/30 shadow-lg shadow-pink-500/30'
+                    : 'border-white/30 bg-white/5 hover:border-white/50'
                     }`}
                 >
                   <div className="font-bold text-lg text-white">
@@ -620,8 +621,8 @@ const WatchParty = () => {
             onClick={initializePeer}
             disabled={!selectedName}
             className={`w-full py-4 rounded-xl font-bold text-lg transition-all duration-300 ${selectedName
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700 hover:shadow-2xl hover:shadow-cyan-500/30'
-                : 'bg-gray-600 text-gray-300 cursor-not-allowed'
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700 hover:shadow-2xl hover:shadow-cyan-500/30'
+              : 'bg-gray-600 text-gray-300 cursor-not-allowed'
               }`}
           >
             🚀 Start P2P Connection
@@ -674,8 +675,8 @@ const WatchParty = () => {
 
           <div className="flex items-center space-x-3">
             <div className={`px-4 py-2 rounded-full flex items-center space-x-2 ${callActive
-                ? 'bg-gradient-to-r from-green-500 to-emerald-600'
-                : 'bg-gradient-to-r from-yellow-500 to-orange-600'
+              ? 'bg-gradient-to-r from-green-500 to-emerald-600'
+              : 'bg-gradient-to-r from-yellow-500 to-orange-600'
               }`}>
               <Wifi className="w-4 h-4 text-white" />
               <span className="text-white font-semibold text-sm">
@@ -959,8 +960,8 @@ const WatchParty = () => {
               <button
                 onClick={toggleMic}
                 className={`p-4 rounded-xl transition-all ${isMicOn
-                    ? 'bg-gradient-to-r from-green-600 to-emerald-700 shadow-lg shadow-green-500/20'
-                    : 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
+                  ? 'bg-gradient-to-r from-green-600 to-emerald-700 shadow-lg shadow-green-500/20'
+                  : 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
                   }`}
               >
                 {isMicOn ? (
@@ -973,8 +974,8 @@ const WatchParty = () => {
               <button
                 onClick={toggleCam}
                 className={`p-4 rounded-xl transition-all ${isCamOn
-                    ? 'bg-gradient-to-r from-blue-600 to-cyan-700 shadow-lg shadow-blue-500/20'
-                    : 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
+                  ? 'bg-gradient-to-r from-blue-600 to-cyan-700 shadow-lg shadow-blue-500/20'
+                  : 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
                   }`}
               >
                 {isCamOn ? (
@@ -988,10 +989,10 @@ const WatchParty = () => {
                 onClick={toggleScreenShare}
                 disabled={!callActive}
                 className={`p-4 rounded-xl transition-all ${isScreenSharing
-                    ? 'bg-gradient-to-r from-purple-600 to-pink-700 shadow-lg shadow-purple-500/20'
-                    : callActive
-                      ? 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
-                      : 'bg-gray-900 border border-gray-800 opacity-50 cursor-not-allowed'
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-700 shadow-lg shadow-purple-500/20'
+                  : callActive
+                    ? 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
+                    : 'bg-gray-900 border border-gray-800 opacity-50 cursor-not-allowed'
                   }`}
               >
                 {isScreenSharing ? (
