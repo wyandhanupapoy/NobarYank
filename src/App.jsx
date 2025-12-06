@@ -23,6 +23,7 @@ const WatchParty = () => {
   const [localSdp, setLocalSdp] = useState('');
   const [remoteSdp, setRemoteSdp] = useState('');
   const [isInitiator, setIsInitiator] = useState(false);
+  const [iceCandidates, setIceCandidates] = useState([]);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -33,6 +34,7 @@ const WatchParty = () => {
   const peerConnectionRef = useRef(null);
   const dataChannelRef = useRef(null);
   const statsIntervalRef = useRef(null);
+  const pendingIceCandidatesRef = useRef([]);
 
   const names = {
     wyan: 'Wyandhanu Maulidan Nugraha',
@@ -67,45 +69,83 @@ const WatchParty = () => {
   const cleanSdp = (sdp) => {
     if (!sdp) return '';
 
-    // Hapus baris yang mengandung atribut yang tidak valid
-    const lines = sdp.split('\n');
-    const validLines = lines.filter(line => {
-      // Hapus baris dengan atribut yang tidak dikenali
-      if (line.startsWith('a=max-message-size')) return false;
-      if (line.startsWith('a=extmap-allow-mixed')) return false;
-      if (line.startsWith('a=msid-semantic')) return false;
-      if (line.includes('a=fmtp:') && line.includes('repair-window')) return false;
-      // Simpan baris lainnya
-      return true;
-    });
+    console.log('Original SDP length:', sdp.length);
 
-    // Gabungkan kembali dan tambahkan baris yang diperlukan
-    let cleanedSdp = validLines.join('\n');
+    // Pisahkan baris
+    const lines = sdp.split('\n');
+    const cleanedLines = [];
+
+    for (const line of lines) {
+      // Skip baris kosong
+      if (!line.trim()) continue;
+
+      // Hapus atribut yang diketahui bermasalah
+      if (line.includes('a=max-message-size')) continue;
+      if (line.includes('a=extmap-allow-mixed')) continue;
+      if (line.includes('a=msid-semantic')) continue;
+
+      // Hapus atribut repair-window dari baris fmtp
+      if (line.includes('repair-window')) {
+        const cleaned = line.replace(/;?\s*repair-window=[^;\s]+/g, '');
+        // Hapus titik koma ganda yang mungkin tertinggal
+        const finalCleaned = cleaned.replace(/;;/g, ';').replace(/;\s*$/, '');
+        if (finalCleaned.trim() && !finalCleaned.includes('a=fmtp:') && finalCleaned.includes('fmtp')) {
+          cleanedLines.push(finalCleaned);
+        } else if (finalCleaned.trim() && finalCleaned !== 'a=fmtp:' && !finalCleaned.endsWith('a=fmtp:')) {
+          cleanedLines.push(finalCleaned);
+        }
+        continue;
+      }
+
+      // Hapus baris dengan ice-options jika ada masalah
+      if (line.includes('ice-options') && line.includes('trickle')) {
+        continue;
+      }
+
+      // Simpan baris lainnya
+      if (line.trim()) {
+        cleanedLines.push(line);
+      }
+    }
 
     // Pastikan ada baris dasar yang diperlukan
-    if (!cleanedSdp.includes('m=audio')) {
-      cleanedSdp += '\nm=audio 9 UDP/TLS/RTP/SAVPF 111';
+    let cleanedSdp = cleanedLines.join('\n');
+
+    // Tambahkan baris dasar jika tidak ada
+    if (!cleanedSdp.includes('v=')) {
+      cleanedSdp = 'v=0\n' + cleanedSdp;
     }
-    if (!cleanedSdp.includes('m=video')) {
-      cleanedSdp += '\nm=video 9 UDP/TLS/RTP/SAVPF 96';
+    if (!cleanedSdp.includes('o=')) {
+      cleanedSdp = 'o=- 0 0 IN IP4 127.0.0.1\n' + cleanedSdp;
+    }
+    if (!cleanedSdp.includes('s=')) {
+      cleanedSdp = cleanedSdp.replace('o=-', 'o=-\ns=-\n');
+    }
+    if (!cleanedSdp.includes('t=')) {
+      const lines = cleanedSdp.split('\n');
+      const sIndex = lines.findIndex(l => l.startsWith('s='));
+      if (sIndex !== -1) {
+        lines.splice(sIndex + 1, 0, 't=0 0');
+        cleanedSdp = lines.join('\n');
+      }
     }
 
+    console.log('Cleaned SDP length:', cleanedSdp.length);
     return cleanedSdp;
   };
 
-  // Get ICE servers
+  // Get ICE servers yang sederhana
   const getIceServers = useCallback(() => {
     return [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'stun:stun4.l.google.com:19302' }
     ];
   }, []);
 
-  // Create peer connection
+  // Create peer connection yang sederhana
   const createPeerConnection = useCallback(() => {
     try {
       if (peerConnectionRef.current) {
@@ -114,8 +154,7 @@ const WatchParty = () => {
 
       const config = {
         iceServers: getIceServers(),
-        iceTransportPolicy: 'all',
-        iceCandidatePoolSize: 5,
+        iceTransportPolicy: 'all'
       };
 
       const pc = new RTCPeerConnection(config);
@@ -124,13 +163,25 @@ const WatchParty = () => {
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log('ICE candidate:', event.candidate);
+          console.log('Local ICE candidate:', event.candidate.candidate);
+          // Simpan ICE candidate untuk ditampilkan
+          setIceCandidates(prev => [...prev, event.candidate.candidate]);
+
+          // Bisa juga dikirim ke partner via copy-paste
+          if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
+            dataChannelRef.current.send(JSON.stringify({
+              type: 'ice-candidate',
+              candidate: event.candidate
+            }));
+          }
         }
       };
 
       // Handle connection state
       pc.oniceconnectionstatechange = () => {
-        console.log('ICE state:', pc.iceConnectionState);
+        console.log('ICE connection state:', pc.iceConnectionState);
+        setConnectionStatus(`ICE: ${pc.iceConnectionState}`);
+
         switch (pc.iceConnectionState) {
           case 'connected':
           case 'completed':
@@ -143,6 +194,9 @@ const WatchParty = () => {
             setCallActive(false);
             setConnectionStatus('⚠️ Connection lost');
             break;
+          case 'checking':
+            setConnectionStatus('🔄 Connecting...');
+            break;
         }
       };
 
@@ -150,78 +204,163 @@ const WatchParty = () => {
       pc.ontrack = (event) => {
         console.log('Received track:', event.track.kind);
         if (event.streams && event.streams[0]) {
+          const stream = event.streams[0];
+
           if (event.track.kind === 'video') {
             if (remoteVideoRef.current) {
-              remoteVideoRef.current.srcObject = event.streams[0];
+              remoteVideoRef.current.srcObject = stream;
             }
           }
         }
       };
 
-      // Handle negotiation needed
-      pc.onnegotiationneeded = async () => {
-        console.log('Negotiation needed');
-        if (isInitiator) {
-          await createAndSendOffer();
-        }
-      };
+      // Handle data channel
+      if (isInitiator) {
+        const dc = pc.createDataChannel('watchparty');
+        setupDataChannel(dc);
+      } else {
+        pc.ondatachannel = (event) => {
+          setupDataChannel(event.channel);
+        };
+      }
 
       return pc;
     } catch (err) {
       console.error('Error creating peer connection:', err);
-      setError('Failed to create connection');
+      setError('Failed to create connection: ' + err.message);
       return null;
     }
   }, [getIceServers, isInitiator]);
 
-  // Create and send offer
+  const setupDataChannel = (dc) => {
+    dataChannelRef.current = dc;
+    dc.onopen = () => {
+      console.log('Data channel opened');
+      setConnectionStatus('📡 Data channel ready');
+    };
+    dc.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ice-candidate' && data.candidate) {
+          addIceCandidate(data.candidate);
+        }
+      } catch (err) {
+        console.error('Error parsing data channel message:', err);
+      }
+    };
+  };
+
+  // Add ICE candidate
+  const addIceCandidate = useCallback(async (candidateData) => {
+    try {
+      if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+        const candidate = new RTCIceCandidate(candidateData);
+        await peerConnectionRef.current.addIceCandidate(candidate);
+        console.log('Added remote ICE candidate');
+      } else {
+        // Simpan candidate untuk ditambahkan nanti
+        pendingIceCandidatesRef.current.push(candidateData);
+      }
+    } catch (err) {
+      console.error('Error adding ICE candidate:', err);
+    }
+  }, []);
+
+  // Apply pending ICE candidates
+  const applyPendingIceCandidates = useCallback(async () => {
+    const pc = peerConnectionRef.current;
+    if (!pc || !pc.remoteDescription) return;
+
+    const pending = pendingIceCandidatesRef.current;
+    while (pending.length > 0) {
+      const candidateData = pending.shift();
+      try {
+        const candidate = new RTCIceCandidate(candidateData);
+        await pc.addIceCandidate(candidate);
+        console.log('Applied pending ICE candidate');
+      } catch (err) {
+        console.error('Error applying pending ICE candidate:', err);
+      }
+    }
+  }, []);
+
+  // Create offer sederhana
   const createAndSendOffer = useCallback(async () => {
     try {
       const pc = peerConnectionRef.current;
-      if (!pc) return;
+      if (!pc) {
+        setError('Please initialize connection first');
+        return;
+      }
 
+      setConnectionStatus('Creating offer...');
+
+      // Buat offer dengan constraint minimal
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true
       });
 
+      // Set local description
       await pc.setLocalDescription(offer);
 
-      // Clean SDP before displaying
-      const cleanedSdp = cleanSdp(pc.localDescription.sdp);
-      setLocalSdp(cleanedSdp);
+      // Tunggu sebentar untuk ICE candidates
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      setConnectionStatus('✅ Offer created - Copy and send to partner');
+      // Clean SDP sebelum ditampilkan
+      if (pc.localDescription && pc.localDescription.sdp) {
+        const cleanedSdp = cleanSdp(pc.localDescription.sdp);
+        setLocalSdp(cleanedSdp);
+        setConnectionStatus('✅ Offer created - Copy and send to partner');
+      } else {
+        setError('Failed to create local description');
+      }
     } catch (err) {
       console.error('Error creating offer:', err);
       setError('Failed to create offer: ' + err.message);
     }
   }, []);
 
-  // Create answer
+  // Create answer sederhana
   const createAndSendAnswer = useCallback(async () => {
     try {
       const pc = peerConnectionRef.current;
-      if (!pc) return;
+      if (!pc) {
+        setError('Please initialize connection first');
+        return;
+      }
 
-      const answer = await pc.createAnswer();
+      setConnectionStatus('Creating answer...');
+
+      const answer = await pc.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
+
       await pc.setLocalDescription(answer);
 
-      // Clean SDP before displaying
-      const cleanedSdp = cleanSdp(pc.localDescription.sdp);
-      setLocalSdp(cleanedSdp);
+      // Tunggu sebentar untuk ICE candidates
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      setConnectionStatus('✅ Answer created - Copy and send back');
+      if (pc.localDescription && pc.localDescription.sdp) {
+        const cleanedSdp = cleanSdp(pc.localDescription.sdp);
+        setLocalSdp(cleanedSdp);
+        setConnectionStatus('✅ Answer created - Copy and send back');
+      } else {
+        setError('Failed to create local description');
+      }
     } catch (err) {
       console.error('Error creating answer:', err);
       setError('Failed to create answer: ' + err.message);
     }
   }, []);
 
-  // Initialize as initiator
+  // Start as initiator
   const startAsInitiator = useCallback(async () => {
     setIsInitiator(true);
     setConnectionStatus('Starting as initiator...');
+    setIceCandidates([]);
+    pendingIceCandidatesRef.current = [];
 
     const pc = createPeerConnection();
     if (!pc) return;
@@ -231,20 +370,22 @@ const WatchParty = () => {
       localStreamRef.current = new MediaStream();
     }
 
-    // Wait a bit before creating offer
+    // Tunggu sebentar sebelum membuat offer
     setTimeout(async () => {
       await createAndSendOffer();
-    }, 1000);
+    }, 500);
   }, [createPeerConnection, createAndSendOffer]);
 
-  // Initialize as receiver
+  // Start as receiver
   const startAsReceiver = useCallback(() => {
     setIsInitiator(false);
     setConnectionStatus('Waiting for offer from initiator...');
+    setIceCandidates([]);
+    pendingIceCandidatesRef.current = [];
     createPeerConnection();
   }, [createPeerConnection]);
 
-  // Apply remote SDP (offer or answer)
+  // Apply remote SDP dengan error handling yang lebih baik
   const applyRemoteSdp = useCallback(async () => {
     if (!remoteSdp.trim()) {
       setError('Please enter remote SDP');
@@ -258,38 +399,97 @@ const WatchParty = () => {
         return;
       }
 
-      // Clean the SDP before using
+      // Clean the SDP
       const cleanedSdp = cleanSdp(remoteSdp);
+      console.log('Cleaned remote SDP:', cleanedSdp.substring(0, 200) + '...');
 
-      // Determine SDP type
-      const isOffer = cleanedSdp.includes('a=sendrecv') || cleanedSdp.includes('o=-');
-
-      const sdpType = isOffer ? 'offer' : 'answer';
-      console.log('Applying remote SDP as:', sdpType);
-
-      const remoteDesc = new RTCSessionDescription({
-        type: sdpType,
-        sdp: cleanedSdp
-      });
-
-      await pc.setRemoteDescription(remoteDesc);
-
-      setConnectionStatus(`✅ Remote ${sdpType} applied successfully`);
-
-      // If we received an offer and we're not the initiator, create answer
-      if (sdpType === 'offer' && !isInitiator) {
-        setTimeout(async () => {
-          await createAndSendAnswer();
-        }, 1000);
+      // Determine SDP type based on content
+      let sdpType = 'offer';
+      if (cleanedSdp.includes('a=sendonly') || cleanedSdp.includes('a=recvonly')) {
+        sdpType = 'answer';
       }
 
-      // Clear remote SDP field
-      setRemoteSdp('');
+      console.log('Setting remote description as:', sdpType);
+
+      try {
+        const remoteDesc = new RTCSessionDescription({
+          type: sdpType,
+          sdp: cleanedSdp
+        });
+
+        await pc.setRemoteDescription(remoteDesc);
+        console.log('Remote description set successfully');
+
+        // Apply pending ICE candidates
+        await applyPendingIceCandidates();
+
+        setConnectionStatus(`✅ Remote ${sdpType} applied successfully`);
+
+        // If we received an offer and we're not the initiator, create answer
+        if (sdpType === 'offer' && !isInitiator) {
+          setTimeout(async () => {
+            await createAndSendAnswer();
+          }, 1000);
+        }
+
+        // Clear remote SDP field
+        setRemoteSdp('');
+
+      } catch (sdpError) {
+        console.error('SDP parsing error:', sdpError);
+
+        // Try alternative approach: create new peer connection and retry
+        if (sdpError.toString().includes('Invalid SDP line')) {
+          setError('Invalid SDP format. Trying alternative method...');
+
+          // Extract only essential SDP lines
+          const essentialLines = cleanedSdp.split('\n').filter(line => {
+            return line.startsWith('v=') ||
+              line.startsWith('o=') ||
+              line.startsWith('s=') ||
+              line.startsWith('t=') ||
+              line.startsWith('m=') ||
+              (line.startsWith('a=') && (
+                line.includes('ice-ufrag') ||
+                line.includes('ice-pwd') ||
+                line.includes('fingerprint') ||
+                line.includes('setup') ||
+                line.includes('mid') ||
+                line.includes('rtpmap') ||
+                line.includes('fmtp')
+              ));
+          });
+
+          const essentialSdp = essentialLines.join('\n');
+          console.log('Essential SDP:', essentialSdp.substring(0, 200) + '...');
+
+          try {
+            const essentialDesc = new RTCSessionDescription({
+              type: sdpType,
+              sdp: essentialSdp
+            });
+
+            await pc.setRemoteDescription(essentialDesc);
+            setConnectionStatus('✅ Remote description applied (essential only)');
+
+            if (sdpType === 'offer' && !isInitiator) {
+              setTimeout(async () => {
+                await createAndSendAnswer();
+              }, 1000);
+            }
+
+            setRemoteSdp('');
+          } catch (essentialError) {
+            console.error('Essential SDP also failed:', essentialError);
+            setError('Failed to apply SDP even with essential lines. Please check SDP format.');
+          }
+        }
+      }
     } catch (err) {
       console.error('Error applying remote SDP:', err);
       setError('Failed to apply remote SDP: ' + err.message);
     }
-  }, [remoteSdp, isInitiator, createAndSendAnswer]);
+  }, [remoteSdp, isInitiator, createAndSendAnswer, applyPendingIceCandidates]);
 
   // Optimized screen sharing
   const toggleScreenShare = useCallback(async () => {
@@ -302,7 +502,7 @@ const WatchParty = () => {
       try {
         const quality = qualityPresets[videoQuality];
 
-        // Get screen stream
+        // Get screen stream dengan constraint minimal
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             width: { ideal: quality.width },
@@ -314,11 +514,18 @@ const WatchParty = () => {
 
         const videoTrack = stream.getVideoTracks()[0];
 
+        // Apply constraints
+        await videoTrack.applyConstraints({
+          width: { ideal: quality.width },
+          height: { ideal: quality.height },
+          frameRate: { ideal: frameRate }
+        });
+
         // Get existing senders
         const pc = peerConnectionRef.current;
         const senders = pc.getSenders();
 
-        // Find video sender or create new one
+        // Find video sender
         let videoSender = senders.find(s => s.track && s.track.kind === 'video');
 
         if (videoSender) {
@@ -329,7 +536,7 @@ const WatchParty = () => {
           pc.addTrack(videoTrack, stream);
         }
 
-        // Display screen on local element
+        // Display screen
         if (screenVideoRef.current) {
           screenVideoRef.current.srcObject = stream;
         }
@@ -342,7 +549,7 @@ const WatchParty = () => {
         screenStreamRef.current = stream;
         setIsScreenSharing(true);
 
-        setConnectionStatus(`📺 Screen sharing: ${videoQuality} @ ${frameRate}fps`);
+        setConnectionStatus(`📺 Screen: ${videoQuality} @ ${frameRate}fps`);
         setTimeout(() => setConnectionStatus(''), 3000);
 
       } catch (err) {
@@ -408,7 +615,7 @@ const WatchParty = () => {
           localVideoRef.current.srcObject = localStreamRef.current;
         }
 
-        // Update peer connection if active
+        // Update peer connection
         if (peerConnectionRef.current && !isScreenSharing) {
           const senders = peerConnectionRef.current.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
@@ -519,6 +726,8 @@ const WatchParty = () => {
     setIsMicOn(false);
     setLocalSdp('');
     setRemoteSdp('');
+    setIceCandidates([]);
+    pendingIceCandidatesRef.current = [];
   }, []);
 
   const disconnect = useCallback(() => {
@@ -531,6 +740,7 @@ const WatchParty = () => {
     setUserName('');
     setConnectionStatus('');
     setError('');
+    setIsInitiator(false);
   }, [cleanup]);
 
   // Copy SDP to clipboard
@@ -539,6 +749,14 @@ const WatchParty = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, []);
+
+  // Copy ICE candidates
+  const copyIceCandidates = useCallback(() => {
+    const candidatesText = iceCandidates.join('\n');
+    navigator.clipboard.writeText(candidatesText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [iceCandidates]);
 
   // Initialize peer
   const initializePeer = useCallback(() => {
@@ -603,10 +821,10 @@ const WatchParty = () => {
                   key={key}
                   onClick={() => setSelectedName(key)}
                   className={`p-5 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 ${selectedName === key
-                    ? key === 'wyan'
-                      ? 'border-blue-400 bg-blue-500/30 shadow-lg shadow-blue-500/30'
-                      : 'border-pink-400 bg-pink-500/30 shadow-lg shadow-pink-500/30'
-                    : 'border-white/30 bg-white/5 hover:border-white/50'
+                      ? key === 'wyan'
+                        ? 'border-blue-400 bg-blue-500/30 shadow-lg shadow-blue-500/30'
+                        : 'border-pink-400 bg-pink-500/30 shadow-lg shadow-pink-500/30'
+                      : 'border-white/30 bg-white/5 hover:border-white/50'
                     }`}
                 >
                   <div className="font-bold text-lg text-white">
@@ -621,8 +839,8 @@ const WatchParty = () => {
             onClick={initializePeer}
             disabled={!selectedName}
             className={`w-full py-4 rounded-xl font-bold text-lg transition-all duration-300 ${selectedName
-              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700 hover:shadow-2xl hover:shadow-cyan-500/30'
-              : 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700 hover:shadow-2xl hover:shadow-cyan-500/30'
+                : 'bg-gray-600 text-gray-300 cursor-not-allowed'
               }`}
           >
             🚀 Start P2P Connection
@@ -632,15 +850,15 @@ const WatchParty = () => {
             <div className="flex items-center justify-center mb-4">
               <div className="flex items-center space-x-2">
                 <Wifi className="w-5 h-5 text-green-400" />
-                <span className="text-green-400 font-bold">Super Fast Setup:</span>
+                <span className="text-green-400 font-bold">Important Notes:</span>
               </div>
             </div>
             <ol className="text-sm text-blue-100 space-y-3 list-decimal list-inside">
-              <li>Select name and click "Start P2P Connection"</li>
-              <li>Choose your role (Initiator or Receiver)</li>
-              <li>Copy SDP and send to partner via WhatsApp/Telegram</li>
-              <li>Paste partner's SDP and click "Apply"</li>
-              <li>You're connected! Toggle screen share to start</li>
+              <li>Use Chrome or Edge for best WebRTC support</li>
+              <li>Choose 480p quality for fastest screen sharing</li>
+              <li>No camera or microphone needed to connect</li>
+              <li>Both users must be on the same WiFi for best performance</li>
+              <li>Copy entire SDP including all lines when sharing</li>
             </ol>
           </div>
         </div>
@@ -660,7 +878,7 @@ const WatchParty = () => {
                 <Users className="w-6 h-6 text-white" />
               </div>
               {callActive && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-900"></div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-900 animate-pulse"></div>
               )}
             </div>
             <div>
@@ -669,14 +887,15 @@ const WatchParty = () => {
                 <span className="text-sm text-gray-400">
                   {isInitiator ? '🎯 Initiator' : '🎯 Receiver'}
                 </span>
+                {callActive && <span className="text-xs text-green-400">● Live</span>}
               </div>
             </div>
           </div>
 
           <div className="flex items-center space-x-3">
             <div className={`px-4 py-2 rounded-full flex items-center space-x-2 ${callActive
-              ? 'bg-gradient-to-r from-green-500 to-emerald-600'
-              : 'bg-gradient-to-r from-yellow-500 to-orange-600'
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600'
+                : 'bg-gradient-to-r from-yellow-500 to-orange-600'
               }`}>
               <Wifi className="w-4 h-4 text-white" />
               <span className="text-white font-semibold text-sm">
@@ -871,6 +1090,28 @@ const WatchParty = () => {
                     <p className="text-xs text-gray-500 mt-2">
                       Send this to your partner via WhatsApp/Telegram
                     </p>
+
+                    {/* ICE Candidates */}
+                    {iceCandidates.length > 0 && (
+                      <div className="mt-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs text-gray-400">ICE Candidates ({iceCandidates.length})</span>
+                          <button
+                            onClick={copyIceCandidates}
+                            className="text-xs text-cyan-400 hover:text-cyan-300"
+                          >
+                            Copy All
+                          </button>
+                        </div>
+                        <div className="max-h-20 overflow-y-auto">
+                          {iceCandidates.slice(0, 3).map((candidate, idx) => (
+                            <div key={idx} className="text-xs text-gray-500 truncate">
+                              {candidate.substring(0, 50)}...
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -960,8 +1201,8 @@ const WatchParty = () => {
               <button
                 onClick={toggleMic}
                 className={`p-4 rounded-xl transition-all ${isMicOn
-                  ? 'bg-gradient-to-r from-green-600 to-emerald-700 shadow-lg shadow-green-500/20'
-                  : 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
+                    ? 'bg-gradient-to-r from-green-600 to-emerald-700 shadow-lg shadow-green-500/20'
+                    : 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
                   }`}
               >
                 {isMicOn ? (
@@ -974,8 +1215,8 @@ const WatchParty = () => {
               <button
                 onClick={toggleCam}
                 className={`p-4 rounded-xl transition-all ${isCamOn
-                  ? 'bg-gradient-to-r from-blue-600 to-cyan-700 shadow-lg shadow-blue-500/20'
-                  : 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-700 shadow-lg shadow-blue-500/20'
+                    : 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
                   }`}
               >
                 {isCamOn ? (
@@ -989,10 +1230,10 @@ const WatchParty = () => {
                 onClick={toggleScreenShare}
                 disabled={!callActive}
                 className={`p-4 rounded-xl transition-all ${isScreenSharing
-                  ? 'bg-gradient-to-r from-purple-600 to-pink-700 shadow-lg shadow-purple-500/20'
-                  : callActive
-                    ? 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
-                    : 'bg-gray-900 border border-gray-800 opacity-50 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-purple-600 to-pink-700 shadow-lg shadow-purple-500/20'
+                    : callActive
+                      ? 'bg-gradient-to-r from-gray-800 to-gray-900 hover:bg-gray-800 border border-gray-700'
+                      : 'bg-gray-900 border border-gray-800 opacity-50 cursor-not-allowed'
                   }`}
               >
                 {isScreenSharing ? (
