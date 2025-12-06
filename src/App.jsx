@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Video, VideoOff, Mic, MicOff, Monitor, MonitorOff, PhoneOff, Copy, Check, Users, Heart } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, Monitor, MonitorOff, PhoneOff, Copy, Check, Users, Heart, RefreshCw } from 'lucide-react';
 import Peer from 'peerjs';
 
 const WatchParty = () => {
@@ -14,6 +14,8 @@ const WatchParty = () => {
   const [userName, setUserName] = useState('');
   const [selectedName, setSelectedName] = useState('');
   const [callActive, setCallActive] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('');
+  const [error, setError] = useState('');
 
   const peerRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -23,6 +25,7 @@ const WatchParty = () => {
   const screenStreamRef = useRef(null);
   const callRef = useRef(null);
   const screenCallRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
 
   const names = {
     wyan: 'Wyandhanu Maulidan Nugraha',
@@ -36,6 +39,9 @@ const WatchParty = () => {
   }, []);
 
   const cleanup = () => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
     }
@@ -55,30 +61,52 @@ const WatchParty = () => {
 
   const initializePeer = () => {
     if (!selectedName) {
-      alert('Pilih nama kamu terlebih dahulu!');
+      setError('Pilih nama kamu terlebih dahulu!');
       return;
     }
 
-    const peer = new Peer({
+    setConnectionStatus('Menghubungkan ke server...');
+    setError('');
+
+    // Generate custom peer ID untuk memudahkan koneksi
+    const customId = `${selectedName}-${Date.now().toString(36)}`;
+
+    const peer = new Peer(customId, {
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
-        ]
-      }
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' }
+        ],
+        iceTransportPolicy: 'all'
+      },
+      debug: 2
     });
 
     peer.on('open', (id) => {
+      console.log('Peer connection opened with ID:', id);
       setPeerId(id);
       setUserName(names[selectedName]);
       setIsConnected(true);
+      setConnectionStatus('✅ Koneksi berhasil!');
+      setTimeout(() => setConnectionStatus(''), 3000);
     });
 
     peer.on('call', (call) => {
-      call.answer(localStreamRef.current);
+      console.log('Receiving call from:', call.peer);
+
+      // Answer with local stream (even if empty)
+      const stream = localStreamRef.current || new MediaStream();
+      call.answer(stream);
 
       call.on('stream', (remoteStream) => {
+        console.log('Received remote stream');
         const isScreen = call.metadata?.type === 'screen';
 
         if (isScreen) {
@@ -93,53 +121,109 @@ const WatchParty = () => {
           }
           callRef.current = call;
           setCallActive(true);
+          setConnectionStatus('🎉 Terhubung dengan pasangan!');
         }
       });
 
       call.on('close', () => {
+        console.log('Call closed');
         if (call.metadata?.type === 'screen') {
           if (screenVideoRef.current) {
             screenVideoRef.current.srcObject = null;
           }
           screenStreamRef.current = null;
+        } else {
+          setCallActive(false);
+          setConnectionStatus('⚠️ Call terputus');
         }
+      });
+
+      call.on('error', (err) => {
+        console.error('Call error:', err);
+        setError('Error pada call: ' + err.type);
       });
     });
 
     peer.on('error', (err) => {
       console.error('Peer error:', err);
-      alert('Terjadi error: ' + err.type);
+
+      if (err.type === 'peer-unavailable') {
+        setError('Peer tidak tersedia. Pastikan ID benar dan pasangan sudah online!');
+      } else if (err.type === 'network') {
+        setError('Error jaringan. Coba refresh halaman.');
+      } else if (err.type === 'server-error') {
+        setError('Server error. Coba lagi dalam beberapa detik.');
+      } else {
+        setError(`Error: ${err.type}. Coba refresh dan ulangi.`);
+      }
+    });
+
+    peer.on('disconnected', () => {
+      console.log('Peer disconnected, attempting reconnect...');
+      setConnectionStatus('🔄 Koneksi terputus, mencoba reconnect...');
+
+      // Try to reconnect after 2 seconds
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (peerRef.current && !peerRef.current.destroyed) {
+          peerRef.current.reconnect();
+        }
+      }, 2000);
+    });
+
+    peer.on('close', () => {
+      console.log('Peer connection closed');
+      setConnectionStatus('❌ Koneksi ditutup');
     });
 
     peerRef.current = peer;
   };
 
   const connectToPeer = () => {
-    if (!inputPeerId) {
-      alert('Masukkan Peer ID pasangan kamu!');
+    if (!inputPeerId.trim()) {
+      setError('Masukkan Peer ID pasangan kamu!');
       return;
     }
 
+    if (!localStreamRef.current || localStreamRef.current.getTracks().length === 0) {
+      setError('Nyalakan kamera atau mic terlebih dahulu!');
+      return;
+    }
+
+    setError('');
+    setConnectionStatus('📞 Memanggil pasangan...');
     setRemotePeerId(inputPeerId);
 
-    if (localStreamRef.current) {
-      const call = peerRef.current.call(inputPeerId, localStreamRef.current);
+    try {
+      const call = peerRef.current.call(inputPeerId, localStreamRef.current, {
+        metadata: { type: 'video' }
+      });
 
       call.on('stream', (remoteStream) => {
+        console.log('Received stream from peer');
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStream;
         }
         setCallActive(true);
+        setConnectionStatus('🎉 Terhubung dengan pasangan!');
+        setTimeout(() => setConnectionStatus(''), 3000);
       });
 
       call.on('error', (err) => {
         console.error('Call error:', err);
-        alert('Gagal terhubung. Pastikan Peer ID benar!');
+        setError('Gagal terhubung: ' + err.type);
+        setCallActive(false);
+      });
+
+      call.on('close', () => {
+        console.log('Call ended');
+        setCallActive(false);
+        setConnectionStatus('Call berakhir');
       });
 
       callRef.current = call;
-    } else {
-      alert('Nyalakan kamera atau mic terlebih dahulu!');
+    } catch (err) {
+      console.error('Error making call:', err);
+      setError('Gagal memanggil. Coba lagi!');
     }
   };
 
@@ -162,14 +246,23 @@ const WatchParty = () => {
           localStreamRef.current.addTrack(track);
         });
 
-        if (localVideoRef.current && localStreamRef.current.getVideoTracks().length > 0) {
+        // Update video preview if camera is on
+        if (isCamOn && localVideoRef.current) {
           localVideoRef.current.srcObject = localStreamRef.current;
         }
 
+        // Update active call with new track
+        if (callRef.current && callRef.current.peerConnection) {
+          stream.getAudioTracks().forEach(track => {
+            callRef.current.peerConnection.addTrack(track, localStreamRef.current);
+          });
+        }
+
         setIsMicOn(true);
+        setError('');
       } catch (err) {
         console.error('Error accessing microphone:', err);
-        alert('Tidak bisa mengakses mikrofon. Pastikan izin diberikan!');
+        setError('Tidak bisa mengakses mikrofon. Cek permission browser!');
       }
     } else {
       localStreamRef.current?.getAudioTracks().forEach(track => {
@@ -203,18 +296,28 @@ const WatchParty = () => {
           localVideoRef.current.srcObject = localStreamRef.current;
         }
 
+        // Update active call with new track
+        if (callRef.current && callRef.current.peerConnection) {
+          stream.getVideoTracks().forEach(track => {
+            callRef.current.peerConnection.addTrack(track, localStreamRef.current);
+          });
+        }
+
         setIsCamOn(true);
+        setError('');
       } catch (err) {
         console.error('Error accessing camera:', err);
-        alert('Tidak bisa mengakses kamera. Pastikan izin diberikan!');
+        setError('Tidak bisa mengakses kamera. Cek permission browser!');
       }
     } else {
       localStreamRef.current?.getVideoTracks().forEach(track => {
         track.stop();
         localStreamRef.current.removeTrack(track);
       });
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStreamRef.current.getAudioTracks().length > 0 ? localStreamRef.current : null;
+      if (localVideoRef.current && !isMicOn) {
+        localVideoRef.current.srcObject = null;
+      } else if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
       }
       setIsCamOn(false);
     }
@@ -222,8 +325,8 @@ const WatchParty = () => {
 
   const toggleScreenShare = async () => {
     if (!isScreenSharing) {
-      if (!remotePeerId) {
-        alert('Hubungkan dengan pasangan terlebih dahulu!');
+      if (!remotePeerId && !callActive) {
+        setError('Hubungkan dengan pasangan terlebih dahulu!');
         return;
       }
 
@@ -231,16 +334,21 @@ const WatchParty = () => {
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 }
           },
           audio: true
         });
 
-        const call = peerRef.current.call(remotePeerId, stream, {
-          metadata: { type: 'screen' }
-        });
+        const targetPeerId = remotePeerId || callRef.current?.peer;
 
-        screenCallRef.current = call;
+        if (targetPeerId) {
+          const call = peerRef.current.call(targetPeerId, stream, {
+            metadata: { type: 'screen' }
+          });
+
+          screenCallRef.current = call;
+        }
 
         if (screenVideoRef.current) {
           screenVideoRef.current.srcObject = stream;
@@ -251,10 +359,11 @@ const WatchParty = () => {
         };
 
         setIsScreenSharing(true);
+        setError('');
       } catch (err) {
         console.error('Error sharing screen:', err);
         if (err.name !== 'NotAllowedError') {
-          alert('Tidak bisa share screen');
+          setError('Tidak bisa share screen');
         }
       }
     } else {
@@ -287,6 +396,17 @@ const WatchParty = () => {
     setCallActive(false);
     setSelectedName('');
     setUserName('');
+    setConnectionStatus('');
+    setError('');
+  };
+
+  const retryConnection = () => {
+    setError('');
+    setConnectionStatus('');
+    if (peerRef.current) {
+      peerRef.current.destroy();
+    }
+    initializePeer();
   };
 
   if (!isConnected) {
@@ -307,6 +427,26 @@ const WatchParty = () => {
               Nonton bareng dengan video call & screen share
             </p>
           </div>
+
+          {/* Status Messages */}
+          {connectionStatus && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700 text-center">{connectionStatus}</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700 text-center">{error}</p>
+              <button
+                onClick={retryConnection}
+                className="mt-2 text-sm text-red-600 hover:text-red-800 underline mx-auto block"
+              >
+                <RefreshCw className="w-4 h-4 inline mr-1" />
+                Coba Lagi
+              </button>
+            </div>
+          )}
 
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -350,8 +490,8 @@ const WatchParty = () => {
               <strong className="text-blue-700">💡 Cara pakai:</strong><br />
               1. Pilih nama → Klik "Mulai Koneksi"<br />
               2. Copy Peer ID yang muncul<br />
-              3. Share ke pasangan kamu<br />
-              4. Nyalakan mic/cam, lalu "Hubungkan"
+              3. Share ke pasangan via WA/Telegram<br />
+              4. Nyalakan mic/cam → Paste ID pasangan → "Hubungkan"
             </p>
           </div>
         </div>
@@ -369,13 +509,13 @@ const WatchParty = () => {
             <div>
               <h2 className="text-white font-semibold text-sm sm:text-base">{userName}</h2>
               <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-400 break-all">ID: {peerId.slice(0, 8)}...</span>
+                <span className="text-xs text-gray-400 break-all">ID: {peerId}</span>
                 <button
                   onClick={copyPeerId}
                   className="text-gray-400 hover:text-white transition"
                   title="Copy Peer ID"
                 >
-                  {copied ? <Check className="w-3 h-3 sm:w-4 sm:h-4" /> : <Copy className="w-3 h-3 sm:w-4 sm:h-4" />}
+                  {copied ? <Check className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" /> : <Copy className="w-3 h-3 sm:w-4 sm:h-4" />}
                 </button>
               </div>
             </div>
@@ -386,6 +526,18 @@ const WatchParty = () => {
           </div>
         </div>
       </div>
+
+      {/* Status/Error Messages */}
+      {(connectionStatus || error) && (
+        <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
+          {connectionStatus && (
+            <p className="text-sm text-blue-400 text-center">{connectionStatus}</p>
+          )}
+          {error && (
+            <p className="text-sm text-red-400 text-center">{error}</p>
+          )}
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -421,7 +573,7 @@ const WatchParty = () => {
                   type="text"
                   placeholder="Paste Peer ID di sini"
                   value={inputPeerId}
-                  onChange={(e) => setInputPeerId(e.target.value)}
+                  onChange={(e) => setInputPeerId(e.target.value.trim())}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 />
                 <button
@@ -515,10 +667,10 @@ const WatchParty = () => {
 
               <button
                 onClick={toggleScreenShare}
-                disabled={!callActive}
+                disabled={!callActive && !remotePeerId}
                 className={`p-2 sm:p-3 rounded-lg transition ${isScreenSharing
                     ? 'bg-green-600 hover:bg-green-700'
-                    : callActive
+                    : (callActive || remotePeerId)
                       ? 'bg-gray-700 hover:bg-gray-600'
                       : 'bg-gray-800 cursor-not-allowed opacity-50'
                   }`}
