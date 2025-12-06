@@ -19,8 +19,7 @@ const WatchParty = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [videoQuality, setVideoQuality] = useState('1080p');
-  const [frameRate, setFrameRate] = useState(60);
-  const [bitrate, setBitrate] = useState(8000);
+  const [frameRate, setFrameRate] = useState(30);
 
   const peerRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -31,7 +30,6 @@ const WatchParty = () => {
   const screenStreamRef = useRef(null);
   const callRef = useRef(null);
   const screenCallRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
 
   const names = {
     wyan: 'Wyandhanu Maulidan Nugraha',
@@ -39,15 +37,12 @@ const WatchParty = () => {
   };
 
   const qualityPresets = {
-    '4K': { width: 3840, height: 2160, label: '4K (3840x2160)' },
-    '1440p': { width: 2560, height: 1440, label: '1440p (2K)' },
-    '1080p': { width: 1920, height: 1080, label: '1080p (Full HD)' },
-    '720p': { width: 1280, height: 720, label: '720p (HD)' },
-    '480p': { width: 854, height: 480, label: '480p (SD)' }
+    '1080p': { width: 1920, height: 1080, label: '1080p (Recommended)', bitrate: 5000 },
+    '720p': { width: 1280, height: 720, label: '720p (Smooth)', bitrate: 3000 },
+    '480p': { width: 854, height: 480, label: '480p (Fast)', bitrate: 1500 }
   };
 
   useEffect(() => {
-    // Fullscreen change listener
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
@@ -61,9 +56,6 @@ const WatchParty = () => {
   }, []);
 
   const cleanup = () => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
     }
@@ -87,72 +79,60 @@ const WatchParty = () => {
       return;
     }
 
-    setConnectionStatus('Menghubungkan ke server...');
+    setConnectionStatus('Menghubungkan...');
     setError('');
 
-    const customId = `${selectedName}-${Date.now().toString(36)}`;
+    const customId = `watchparty-${selectedName}-${Date.now().toString(36)}`;
 
+    // Optimized peer configuration
     const peer = new Peer(customId, {
-      host: '0.peerjs.com',
-      port: 443,
-      path: '/',
-      secure: true,
+      debug: 1,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' }
-        ],
-        iceTransportPolicy: 'all',
-        sdpSemantics: 'unified-plan'
-      },
-      debug: 2
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      }
     });
 
     peer.on('open', (id) => {
-      console.log('Peer connection opened with ID:', id);
+      console.log('Connected with ID:', id);
       setPeerId(id);
       setUserName(names[selectedName]);
       setIsConnected(true);
-      setConnectionStatus('✅ Koneksi berhasil!');
-      setTimeout(() => setConnectionStatus(''), 3000);
+      setConnectionStatus('✅ Siap!');
+      setTimeout(() => setConnectionStatus(''), 2000);
     });
 
     peer.on('call', (call) => {
-      console.log('Receiving call from:', call.peer);
+      console.log('Incoming call from:', call.peer);
 
       const stream = localStreamRef.current || new MediaStream();
       call.answer(stream);
 
-      // Set up bandwidth constraints for received stream
-      if (call.peerConnection) {
-        setupBandwidthConstraints(call.peerConnection);
-      }
-
       call.on('stream', (remoteStream) => {
-        console.log('Received remote stream');
         const isScreen = call.metadata?.type === 'screen';
 
         if (isScreen) {
+          console.log('Received screen share');
           if (screenVideoRef.current) {
             screenVideoRef.current.srcObject = remoteStream;
           }
           screenStreamRef.current = remoteStream;
           screenCallRef.current = call;
         } else {
+          console.log('Received video call');
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = remoteStream;
           }
           callRef.current = call;
           setCallActive(true);
-          setConnectionStatus('🎉 Terhubung dengan pasangan!');
+          setConnectionStatus('🎉 Terhubung!');
+          setTimeout(() => setConnectionStatus(''), 2000);
         }
       });
 
       call.on('close', () => {
-        console.log('Call closed');
         if (call.metadata?.type === 'screen') {
           if (screenVideoRef.current) {
             screenVideoRef.current.srcObject = null;
@@ -160,122 +140,57 @@ const WatchParty = () => {
           screenStreamRef.current = null;
         } else {
           setCallActive(false);
-          setConnectionStatus('⚠️ Call terputus');
         }
-      });
-
-      call.on('error', (err) => {
-        console.error('Call error:', err);
-        setError('Error pada call: ' + err.type);
       });
     });
 
     peer.on('error', (err) => {
       console.error('Peer error:', err);
-
       if (err.type === 'peer-unavailable') {
-        setError('Peer tidak tersedia. Pastikan ID benar dan pasangan sudah online!');
+        setError('Peer tidak tersedia. Pastikan ID benar!');
       } else if (err.type === 'network') {
-        setError('Error jaringan. Coba refresh halaman.');
-      } else if (err.type === 'server-error') {
-        setError('Server error. Coba lagi dalam beberapa detik.');
+        setError('Network error. Coba lagi.');
       } else {
-        setError(`Error: ${err.type}. Coba refresh dan ulangi.`);
+        setError('Error: ' + err.type);
       }
-    });
-
-    peer.on('disconnected', () => {
-      console.log('Peer disconnected, attempting reconnect...');
-      setConnectionStatus('🔄 Koneksi terputus, mencoba reconnect...');
-
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (peerRef.current && !peerRef.current.destroyed) {
-          peerRef.current.reconnect();
-        }
-      }, 2000);
-    });
-
-    peer.on('close', () => {
-      console.log('Peer connection closed');
-      setConnectionStatus('❌ Koneksi ditutup');
     });
 
     peerRef.current = peer;
   };
 
-  const setupBandwidthConstraints = (peerConnection) => {
-    if (!peerConnection) return;
-
-    const senders = peerConnection.getSenders();
-    senders.forEach(sender => {
-      if (sender.track && sender.track.kind === 'video') {
-        const parameters = sender.getParameters();
-        if (!parameters.encodings) {
-          parameters.encodings = [{}];
-        }
-
-        // Set maximum bitrate in kbps (converted from our state which is in kbps)
-        parameters.encodings[0].maxBitrate = bitrate * 1000;
-
-        sender.setParameters(parameters)
-          .then(() => console.log('Bitrate set to:', bitrate, 'kbps'))
-          .catch(err => console.error('Error setting bitrate:', err));
-      }
-    });
-  };
-
   const connectToPeer = () => {
     if (!inputPeerId.trim()) {
-      setError('Masukkan Peer ID pasangan kamu!');
+      setError('Masukkan Peer ID pasangan!');
       return;
     }
 
-    if (!localStreamRef.current || localStreamRef.current.getTracks().length === 0) {
-      setError('Nyalakan kamera atau mic terlebih dahulu!');
+    if (!localStreamRef.current) {
+      setError('Nyalakan camera atau mic dulu!');
       return;
     }
 
     setError('');
-    setConnectionStatus('📞 Memanggil pasangan...');
+    setConnectionStatus('Menghubungi...');
     setRemotePeerId(inputPeerId);
 
-    try {
-      const call = peerRef.current.call(inputPeerId, localStreamRef.current, {
-        metadata: { type: 'video' }
-      });
+    const call = peerRef.current.call(inputPeerId, localStreamRef.current);
 
-      // Set up bandwidth constraints for outgoing stream
-      if (call.peerConnection) {
-        setupBandwidthConstraints(call.peerConnection);
+    call.on('stream', (remoteStream) => {
+      console.log('Connected to peer');
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
       }
+      setCallActive(true);
+      setConnectionStatus('🎉 Terhubung!');
+      setTimeout(() => setConnectionStatus(''), 2000);
+    });
 
-      call.on('stream', (remoteStream) => {
-        console.log('Received stream from peer');
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-        }
-        setCallActive(true);
-        setConnectionStatus('🎉 Terhubung dengan pasangan!');
-        setTimeout(() => setConnectionStatus(''), 3000);
-      });
+    call.on('error', (err) => {
+      console.error('Call error:', err);
+      setError('Gagal connect: ' + err.type);
+    });
 
-      call.on('error', (err) => {
-        console.error('Call error:', err);
-        setError('Gagal terhubung: ' + err.type);
-        setCallActive(false);
-      });
-
-      call.on('close', () => {
-        console.log('Call ended');
-        setCallActive(false);
-        setConnectionStatus('Call berakhir');
-      });
-
-      callRef.current = call;
-    } catch (err) {
-      console.error('Error making call:', err);
-      setError('Gagal memanggil. Coba lagi!');
-    }
+    callRef.current = call;
   };
 
   const toggleMic = async () => {
@@ -285,9 +200,7 @@ const WatchParty = () => {
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 48000,
-            channelCount: 2
+            autoGainControl: true
           }
         });
 
@@ -303,17 +216,10 @@ const WatchParty = () => {
           localVideoRef.current.srcObject = localStreamRef.current;
         }
 
-        if (callRef.current && callRef.current.peerConnection) {
-          stream.getAudioTracks().forEach(track => {
-            callRef.current.peerConnection.addTrack(track, localStreamRef.current);
-          });
-        }
-
         setIsMicOn(true);
         setError('');
       } catch (err) {
-        console.error('Error accessing microphone:', err);
-        setError('Tidak bisa mengakses mikrofon. Cek permission browser!');
+        setError('Tidak bisa akses mic!');
       }
     } else {
       localStreamRef.current?.getAudioTracks().forEach(track => {
@@ -329,10 +235,9 @@ const WatchParty = () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 },
-            facingMode: 'user'
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
           }
         });
 
@@ -348,17 +253,10 @@ const WatchParty = () => {
           localVideoRef.current.srcObject = localStreamRef.current;
         }
 
-        if (callRef.current && callRef.current.peerConnection) {
-          stream.getVideoTracks().forEach(track => {
-            callRef.current.peerConnection.addTrack(track, localStreamRef.current);
-          });
-        }
-
         setIsCamOn(true);
         setError('');
       } catch (err) {
-        console.error('Error accessing camera:', err);
-        setError('Tidak bisa mengakses kamera. Cek permission browser!');
+        setError('Tidak bisa akses camera!');
       }
     } else {
       localStreamRef.current?.getVideoTracks().forEach(track => {
@@ -367,8 +265,6 @@ const WatchParty = () => {
       });
       if (localVideoRef.current && !isMicOn) {
         localVideoRef.current.srcObject = null;
-      } else if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStreamRef.current;
       }
       setIsCamOn(false);
     }
@@ -377,7 +273,7 @@ const WatchParty = () => {
   const toggleScreenShare = async () => {
     if (!isScreenSharing) {
       if (!remotePeerId && !callActive) {
-        setError('Hubungkan dengan pasangan terlebih dahulu!');
+        setError('Connect dengan pasangan dulu!');
         return;
       }
 
@@ -386,17 +282,11 @@ const WatchParty = () => {
 
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
-            width: { ideal: quality.width, max: quality.width },
-            height: { ideal: quality.height, max: quality.height },
-            frameRate: { ideal: frameRate, max: frameRate },
-            cursor: 'always',
-            displaySurface: 'monitor'
+            width: { ideal: quality.width },
+            height: { ideal: quality.height },
+            frameRate: { ideal: frameRate }
           },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            sampleRate: 48000
-          }
+          audio: true
         });
 
         const targetPeerId = remotePeerId || callRef.current?.peer;
@@ -405,28 +295,6 @@ const WatchParty = () => {
           const call = peerRef.current.call(targetPeerId, stream, {
             metadata: { type: 'screen' }
           });
-
-          // Apply bitrate constraint for screen share
-          if (call.peerConnection) {
-            setTimeout(() => {
-              const senders = call.peerConnection.getSenders();
-              senders.forEach(sender => {
-                if (sender.track && sender.track.kind === 'video') {
-                  const parameters = sender.getParameters();
-                  if (!parameters.encodings) {
-                    parameters.encodings = [{}];
-                  }
-
-                  parameters.encodings[0].maxBitrate = bitrate * 1000;
-                  parameters.encodings[0].maxFramerate = frameRate;
-
-                  sender.setParameters(parameters)
-                    .then(() => console.log('Screen share quality set:', videoQuality, frameRate + 'fps', bitrate + 'kbps'))
-                    .catch(err => console.error('Error setting quality:', err));
-                }
-              });
-            }, 100);
-          }
 
           screenCallRef.current = call;
         }
@@ -440,11 +308,9 @@ const WatchParty = () => {
         };
 
         setIsScreenSharing(true);
-        setError('');
-        setConnectionStatus(`🖥️ Screen share aktif: ${videoQuality} @ ${frameRate}fps`);
+        setConnectionStatus(`🖥️ Screen share: ${videoQuality} @ ${frameRate}fps`);
         setTimeout(() => setConnectionStatus(''), 3000);
       } catch (err) {
-        console.error('Error sharing screen:', err);
         if (err.name !== 'NotAllowedError') {
           setError('Tidak bisa share screen');
         }
@@ -453,12 +319,11 @@ const WatchParty = () => {
       if (screenCallRef.current) {
         screenCallRef.current.close();
       }
-      if (screenVideoRef.current && screenVideoRef.current.srcObject) {
+      if (screenVideoRef.current?.srcObject) {
         screenVideoRef.current.srcObject.getTracks().forEach(track => track.stop());
         screenVideoRef.current.srcObject = null;
       }
       setIsScreenSharing(false);
-      setConnectionStatus('');
     }
   };
 
@@ -467,15 +332,10 @@ const WatchParty = () => {
       try {
         await fullscreenContainerRef.current.requestFullscreen();
       } catch (err) {
-        console.error('Error entering fullscreen:', err);
-        setError('Tidak bisa masuk fullscreen mode');
+        setError('Tidak bisa fullscreen');
       }
     } else {
-      try {
-        await document.exitFullscreen();
-      } catch (err) {
-        console.error('Error exiting fullscreen:', err);
-      }
+      await document.exitFullscreen();
     }
   };
 
@@ -502,15 +362,6 @@ const WatchParty = () => {
     setUserName('');
     setConnectionStatus('');
     setError('');
-  };
-
-  const retryConnection = () => {
-    setError('');
-    setConnectionStatus('');
-    if (peerRef.current) {
-      peerRef.current.destroy();
-    }
-    initializePeer();
   };
 
   if (!isConnected) {
@@ -541,13 +392,6 @@ const WatchParty = () => {
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-700 text-center">{error}</p>
-              <button
-                onClick={retryConnection}
-                className="mt-2 text-sm text-red-600 hover:text-red-800 underline mx-auto block"
-              >
-                <RefreshCw className="w-4 h-4 inline mr-1" />
-                Coba Lagi
-              </button>
             </div>
           )}
 
@@ -591,10 +435,10 @@ const WatchParty = () => {
           <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-gray-700 leading-relaxed">
               <strong className="text-blue-700">💡 Cara pakai:</strong><br />
-              1. Pilih nama → Klik "Mulai Koneksi"<br />
-              2. Copy Peer ID yang muncul<br />
-              3. Share ke pasangan via WA/Telegram<br />
-              4. Nyalakan mic/cam → Paste ID pasangan → "Hubungkan"
+              1. Pilih nama → "Mulai Koneksi"<br />
+              2. Copy Peer ID → Share ke pasangan<br />
+              3. Nyalakan mic/cam → Paste ID → "Hubungkan"<br />
+              4. Klik icon Settings untuk atur kualitas
             </p>
           </div>
         </div>
@@ -612,13 +456,9 @@ const WatchParty = () => {
             <div>
               <h2 className="text-white font-semibold text-sm sm:text-base">{userName}</h2>
               <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-400 break-all">ID: {peerId}</span>
-                <button
-                  onClick={copyPeerId}
-                  className="text-gray-400 hover:text-white transition"
-                  title="Copy Peer ID"
-                >
-                  {copied ? <Check className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" /> : <Copy className="w-3 h-3 sm:w-4 sm:h-4" />}
+                <span className="text-xs text-gray-400">ID: {peerId.slice(0, 20)}...</span>
+                <button onClick={copyPeerId} className="text-gray-400 hover:text-white">
+                  {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
             </div>
@@ -627,46 +467,36 @@ const WatchParty = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setShowSettings(!showSettings)}
-              className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
-              title="Settings"
+              className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg"
             >
-              <Settings className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+              <Settings className="w-5 h-5 text-white" />
             </button>
-            <div className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm ${callActive ? 'bg-green-500' : 'bg-yellow-500'}`}>
-              {callActive ? '🟢 Terhubung' : '🟡 Siap'}
+            <div className={`px-3 py-1 rounded-full text-sm ${callActive ? 'bg-green-500' : 'bg-yellow-500'}`}>
+              {callActive ? '🟢 Live' : '🟡 Siap'}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Settings Panel */}
+      {/* Settings */}
       {showSettings && (
         <div className="bg-gray-800 border-b border-gray-700 p-4">
-          <div className="max-w-7xl mx-auto">
+          <div className="max-w-4xl mx-auto">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-white font-semibold flex items-center">
-                <Settings className="w-5 h-5 mr-2" />
-                Pengaturan Kualitas Screen Share
-              </h3>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="text-gray-400 hover:text-white"
-              >
+              <h3 className="text-white font-semibold">Kualitas Screen Share</h3>
+              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Video Quality */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Resolusi Video
-                </label>
+                <label className="block text-sm text-gray-300 mb-2">Resolusi</label>
                 <select
                   value={videoQuality}
                   onChange={(e) => setVideoQuality(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-pink-500"
                   disabled={isScreenSharing}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-pink-500"
                 >
                   {Object.entries(qualityPresets).map(([key, value]) => (
                     <option key={key} value={key}>{value.label}</option>
@@ -674,101 +504,59 @@ const WatchParty = () => {
                 </select>
               </div>
 
-              {/* Frame Rate */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm text-gray-300 mb-2">
                   Frame Rate: {frameRate} FPS
                 </label>
                 <input
                   type="range"
-                  min="24"
+                  min="15"
                   max="60"
-                  step="6"
+                  step="15"
                   value={frameRate}
                   onChange={(e) => setFrameRate(parseInt(e.target.value))}
-                  className="w-full"
                   disabled={isScreenSharing}
+                  className="w-full"
                 />
                 <div className="flex justify-between text-xs text-gray-400 mt-1">
-                  <span>24</span>
+                  <span>15</span>
                   <span>30</span>
                   <span>60</span>
-                </div>
-              </div>
-
-              {/* Bitrate */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Bitrate: {bitrate} kbps
-                </label>
-                <input
-                  type="range"
-                  min="2000"
-                  max="15000"
-                  step="1000"
-                  value={bitrate}
-                  onChange={(e) => setBitrate(parseInt(e.target.value))}
-                  className="w-full"
-                  disabled={isScreenSharing}
-                />
-                <div className="flex justify-between text-xs text-gray-400 mt-1">
-                  <span>2 Mbps</span>
-                  <span>8 Mbps</span>
-                  <span>15 Mbps</span>
                 </div>
               </div>
             </div>
 
             {isScreenSharing && (
-              <p className="text-xs text-yellow-400 mt-3">
-                ⚠️ Stop screen share untuk mengubah pengaturan
-              </p>
+              <p className="text-xs text-yellow-400 mt-3">⚠️ Stop screen share untuk ubah settings</p>
             )}
-
-            <div className="mt-4 p-3 bg-gray-900 rounded-lg">
-              <p className="text-xs text-gray-400">
-                <strong className="text-gray-300">💡 Rekomendasi untuk jaringan bagus:</strong><br />
-                • 1080p @ 60fps dengan bitrate 8-10 Mbps untuk gaming/video smooth<br />
-                • 1440p @ 60fps dengan bitrate 10-15 Mbps untuk kualitas maksimal<br />
-                • 4K hanya jika internet &gt;50 Mbps dan perangkat powerful
-              </p>
-            </div>
           </div>
         </div>
       )}
 
       {(connectionStatus || error) && (
         <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
-          {connectionStatus && (
-            <p className="text-sm text-blue-400 text-center">{connectionStatus}</p>
-          )}
-          {error && (
-            <p className="text-sm text-red-400 text-center">{error}</p>
-          )}
+          {connectionStatus && <p className="text-sm text-blue-400 text-center">{connectionStatus}</p>}
+          {error && <p className="text-sm text-red-400 text-center">{error}</p>}
         </div>
       )}
 
-      {/* Main Content */}
+      {/* Main */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden" ref={fullscreenContainerRef}>
-        {/* Screen Share Area */}
-        <div className={`flex-1 bg-black flex items-center justify-center relative ${isFullscreen ? 'h-screen' : ''}`}>
+        {/* Screen Area */}
+        <div className="flex-1 bg-black flex items-center justify-center relative">
           <video
             ref={screenVideoRef}
             autoPlay
             playsInline
+            muted={false}
             className="max-w-full max-h-full object-contain"
           />
 
-          {/* Fullscreen Floating Video */}
+          {/* Fullscreen PiP */}
           {isFullscreen && callActive && (
-            <div className="absolute bottom-4 right-4 w-48 sm:w-64 md:w-80 z-50">
+            <div className="absolute bottom-4 right-4 w-64 md:w-80 z-50">
               <div className="relative bg-gray-900 rounded-lg overflow-hidden shadow-2xl border-2 border-gray-700">
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
+                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
                 <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 px-2 py-1 rounded text-xs text-white">
                   {selectedName === 'wyan' ? 'Maha' : 'Wyandhanu'}
                 </div>
@@ -776,12 +564,10 @@ const WatchParty = () => {
             </div>
           )}
 
-          {/* Fullscreen Button */}
           {screenStreamRef.current && (
             <button
               onClick={toggleFullscreen}
-              className="absolute top-4 right-4 p-3 bg-gray-800 bg-opacity-80 hover:bg-opacity-100 rounded-lg transition z-40"
-              title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              className="absolute top-4 right-4 p-3 bg-gray-800 bg-opacity-80 hover:bg-opacity-100 rounded-lg z-40"
             >
               <Maximize className="w-5 h-5 text-white" />
             </button>
@@ -790,61 +576,46 @@ const WatchParty = () => {
           {!screenStreamRef.current && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center text-gray-500 p-4">
-                <Monitor className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-sm sm:text-base">Tidak ada screen share aktif</p>
-                <p className="text-xs mt-2 text-gray-600">Atur kualitas di Settings → Klik tombol screen share</p>
+                <Monitor className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p className="text-base">Tidak ada screen share</p>
+                <p className="text-xs mt-2 text-gray-600">Klik Settings → Atur kualitas → Share</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Video Call Sidebar */}
+        {/* Sidebar */}
         <div className={`w-full bg-gray-800 flex flex-col ${isFullscreen ? 'hidden' : 'lg:w-80'}`}>
-          <div className="flex-1 p-3 sm:p-4 space-y-3 sm:space-y-4 overflow-y-auto">
-            {/* Connection Box */}
+          <div className="flex-1 p-4 space-y-4 overflow-y-auto">
             {!callActive && (
               <div className="bg-gray-900 rounded-lg p-4 space-y-3">
-                <label className="block text-sm font-medium text-gray-300">
-                  Peer ID Pasangan:
-                </label>
+                <label className="block text-sm font-medium text-gray-300">Peer ID Pasangan:</label>
                 <input
                   type="text"
-                  placeholder="Paste Peer ID di sini"
+                  placeholder="Paste ID di sini"
                   value={inputPeerId}
                   onChange={(e) => setInputPeerId(e.target.value.trim())}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-pink-500"
                 />
                 <button
                   onClick={connectToPeer}
                   disabled={!inputPeerId || !localStreamRef.current}
-                  className={`w-full py-2 rounded-lg font-semibold text-sm transition ${inputPeerId && localStreamRef.current
+                  className={`w-full py-2 rounded-lg font-semibold text-sm ${inputPeerId && localStreamRef.current
                       ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600'
                       : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                     }`}
                 >
                   Hubungkan
                 </button>
-                <p className="text-xs text-gray-500 text-center">
-                  Nyalakan mic/cam dulu sebelum hubungkan
-                </p>
               </div>
             )}
 
             {/* Local Video */}
             <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                muted
-                playsInline
-                className="w-full h-full object-cover"
-              />
+              <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
               {!isCamOn && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-                  <div className="text-center">
-                    <VideoOff className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600 mx-auto mb-2" />
-                    <p className="text-xs sm:text-sm text-gray-500">Kamera Mati</p>
-                  </div>
+                  <VideoOff className="w-8 h-8 text-gray-600" />
                 </div>
               )}
               <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 px-2 py-1 rounded text-xs text-white">
@@ -854,18 +625,10 @@ const WatchParty = () => {
 
             {/* Remote Video */}
             <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-cover"
-              />
+              <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
               {!callActive && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-                  <div className="text-center">
-                    <Users className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600 mx-auto mb-2" />
-                    <p className="text-xs sm:text-sm text-gray-500">Menunggu pasangan...</p>
-                  </div>
+                  <Users className="w-8 h-8 text-gray-600" />
                 </div>
               )}
               {callActive && (
@@ -877,60 +640,39 @@ const WatchParty = () => {
           </div>
 
           {/* Controls */}
-          <div className="p-3 sm:p-4 bg-gray-900 border-t border-gray-700">
+          <div className="p-4 bg-gray-900 border-t border-gray-700">
             <div className="grid grid-cols-4 gap-2 mb-3">
               <button
                 onClick={toggleMic}
-                className={`p-2 sm:p-3 rounded-lg transition ${isMicOn ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
-                  }`}
-                title="Toggle Microphone"
+                className={`p-3 rounded-lg ${isMicOn ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
               >
-                {isMicOn ?
-                  <Mic className="w-4 h-4 sm:w-5 sm:h-5 text-white mx-auto" /> :
-                  <MicOff className="w-4 h-4 sm:w-5 sm:h-5 text-white mx-auto" />
-                }
+                {isMicOn ? <Mic className="w-5 h-5 text-white mx-auto" /> : <MicOff className="w-5 h-5 text-white mx-auto" />}
               </button>
 
               <button
                 onClick={toggleCam}
-                className={`p-2 sm:p-3 rounded-lg transition ${isCamOn ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
-                  }`}
-                title="Toggle Camera"
+                className={`p-3 rounded-lg ${isCamOn ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
               >
-                {isCamOn ?
-                  <Video className="w-4 h-4 sm:w-5 sm:h-5 text-white mx-auto" /> :
-                  <VideoOff className="w-4 h-4 sm:w-5 sm:h-5 text-white mx-auto" />
-                }
+                {isCamOn ? <Video className="w-5 h-5 text-white mx-auto" /> : <VideoOff className="w-5 h-5 text-white mx-auto" />}
               </button>
 
               <button
                 onClick={toggleScreenShare}
-                disabled={!callActive && !remotePeerId}
-                className={`p-2 sm:p-3 rounded-lg transition ${isScreenSharing
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : (callActive || remotePeerId)
-                      ? 'bg-gray-700 hover:bg-gray-600'
-                      : 'bg-gray-800 cursor-not-allowed opacity-50'
+                disabled={!callActive}
+                className={`p-3 rounded-lg ${isScreenSharing ? 'bg-green-600 hover:bg-green-700' :
+                    callActive ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-800 opacity-50 cursor-not-allowed'
                   }`}
-                title="Toggle Screen Share"
               >
-                {isScreenSharing ?
-                  <Monitor className="w-4 h-4 sm:w-5 sm:h-5 text-white mx-auto" /> :
-                  <MonitorOff className="w-4 h-4 sm:w-5 sm:h-5 text-white mx-auto" />
-                }
+                {isScreenSharing ? <Monitor className="w-5 h-5 text-white mx-auto" /> : <MonitorOff className="w-5 h-5 text-white mx-auto" />}
               </button>
 
-              <button
-                onClick={disconnect}
-                className="p-2 sm:p-3 bg-red-600 hover:bg-red-700 rounded-lg transition"
-                title="Disconnect"
-              >
-                <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5 text-white mx-auto" />
+              <button onClick={disconnect} className="p-3 bg-red-600 hover:bg-red-700 rounded-lg">
+                <PhoneOff className="w-5 h-5 text-white mx-auto" />
               </button>
             </div>
 
             <p className="text-xs text-gray-500 text-center">
-              {callActive ? '✅ Sudah terhubung' : '⚠️ Hubungkan dulu dengan pasangan'}
+              {callActive ? '✅ Connected' : '⚠️ Connect dulu'}
             </p>
           </div>
         </div>
