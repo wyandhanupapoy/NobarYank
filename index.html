@@ -13,68 +13,199 @@
             --bg-dark: #0f172a;
             --primary: #f43f5e;
             --accent: #3b82f6;
-            --glass: rgba(15, 23, 42, 0.85);
+            --danger: #ef4444;
+            --glass: rgba(15, 23, 42, 0.9);
             --text: #f8fafc;
         }
+
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
         body {
             font-family: 'Poppins', sans-serif;
             background-color: var(--bg-dark);
             color: var(--text);
-            margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
+
+        /* HEADER */
         header {
-            padding: 15px 20px; background: rgba(0,0,0,0.3); backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; z-index: 50;
+            padding: 15px 20px;
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 50;
         }
+
         .couple-names { font-size: 1rem; font-weight: 600; }
         .couple-names span { color: var(--primary); }
         .heart-icon { color: var(--primary); margin: 0 5px; animation: heartbeat 1.5s infinite; }
         @keyframes heartbeat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
-        
-        .main-stage { flex: 1; position: relative; display: flex; justify-content: center; align-items: center; background: black; }
-        #screenVideo { width: 100%; height: 100%; max-height: 80vh; object-fit: contain; }
-        .placeholder-text { position: absolute; color: #64748b; text-align: center; z-index: 0; }
-        
-        .cam-container {
-            position: absolute; bottom: 100px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 20;
-        }
-        .cam-box {
-            width: 120px; height: 120px; background: #333; border-radius: 12px; overflow: hidden;
-            border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 4px 15px rgba(0,0,0,0.5); position: relative;
-        }
-        .cam-box video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        .cam-label { position: absolute; bottom: 0; left: 0; width: 100%; font-size: 10px; background: rgba(0,0,0,0.6); text-align: center; padding: 2px; }
 
+        /* AREA UTAMA */
+        .main-stage {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: black;
+            width: 100%;
+        }
+
+        #screenVideo {
+            width: 100%;
+            height: 100%;
+            max-height: 85vh;
+            object-fit: contain; /* Agar film tidak gepeng di HP */
+        }
+
+        .placeholder-text {
+            position: absolute;
+            color: #64748b;
+            text-align: center;
+            z-index: 0;
+            padding: 20px;
+        }
+
+        /* KAMERA FLOATING (Pip) */
+        .cam-container {
+            position: absolute;
+            bottom: 100px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 20;
+            transition: all 0.3s ease;
+        }
+
+        .cam-box {
+            width: 120px;
+            height: 120px;
+            background: #1e293b;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid rgba(255,255,255,0.2);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        .cam-box video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror effect */
+        }
+        
+        .cam-label {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            font-size: 10px; background: rgba(0,0,0,0.6); text-align: center; padding: 2px;
+        }
+
+        /* PANEL KONEKSI */
+        .connection-panel {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--glass);
+            padding: 25px;
+            border-radius: 20px;
+            border: 1px solid #334155;
+            text-align: center;
+            z-index: 100;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            transition: opacity 0.3s;
+        }
+        
+        .connection-panel.hidden {
+            opacity: 0;
+            pointer-events: none;
+            display: none; /* Penting agar tidak menghalangi klik video */
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            background: #1e293b;
+            color: white;
+            text-align: center;
+            font-size: 16px; /* Mencegah zoom in otomatis di iPhone */
+        }
+
+        /* CONTROL BAR */
         .control-bar {
-            padding: 15px; background: var(--glass); backdrop-filter: blur(10px); border-top: 1px solid rgba(255,255,255,0.1);
-            display: flex; justify-content: center; gap: 15px; z-index: 50;
+            padding: 15px;
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            z-index: 50;
+            padding-bottom: env(safe-area-inset-bottom); /* Support iPhone X+ */
         }
+
         .btn-control {
-            width: 50px; height: 50px; border-radius: 50%; border: none; background: #334155; color: white;
-            font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;
+            width: 50px; height: 50px;
+            border-radius: 50%;
+            border: none;
+            background: #334155;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: 0.2s;
+            -webkit-tap-highlight-color: transparent;
         }
+
         .btn-control:hover { transform: scale(1.1); }
         .btn-control.active { background: var(--primary); box-shadow: 0 0 15px var(--primary); }
         
-        .connection-panel {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(15, 23, 42, 0.95); padding: 30px; border-radius: 20px; border: 1px solid #334155;
-            text-align: center; z-index: 100; width: 90%; max-width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        /* Tombol End Call Khusus */
+        .btn-hangup {
+            background-color: var(--danger) !important;
         }
-        .connection-panel.hidden { display: none; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #475569; background: #1e293b; color: white; text-align: center; }
-        .id-display { font-size: 0.9rem; color: #94a3b8; margin-top: 15px; cursor: pointer; padding: 5px; border: 1px dashed #475569; border-radius: 6px; }
+        .btn-hangup:hover { background-color: #dc2626 !important; }
 
+        /* RESPONSIVE HP */
         @media (max-width: 768px) {
-            .cam-container { flex-direction: row; bottom: 90px; right: 10px; left: 10px; justify-content: center; }
-            .cam-box { width: 80px; height: 80px; border-radius: 50%; }
+            .cam-container {
+                flex-direction: row; /* Kamera jejer ke samping di HP */
+                bottom: 85px; 
+                right: 50%; 
+                transform: translateX(50%);
+                width: 100%;
+                justify-content: center;
+            }
+            .cam-box { width: 80px; height: 80px; border-radius: 50%; } /* Jadi bulat di HP */
         }
+
+        /* HP MODE LANDSCAPE (FULLSCREEN FILM) */
         @media (max-height: 500px) and (orientation: landscape) {
-            header, .control-bar { opacity: 0; transition: opacity 0.5s; }
-            header:hover, .control-bar:hover { opacity: 1; }
-            .cam-container { right: 10px; bottom: 10px; flex-direction: column; }
-            .cam-box { width: 100px; height: 100px; opacity: 0.8; }
+            header, .control-bar { opacity: 0; pointer-events: none; transition: 0.5s; }
+            /* Munculkan tombol kalau disentuh layar atas/bawah */
+            header:hover, .control-bar:hover { opacity: 1; pointer-events: auto; }
+            
+            .cam-container {
+                right: 10px; bottom: 10px; 
+                flex-direction: column; 
+                transform: none;
+                width: auto;
+            }
+            .cam-box { width: 90px; height: 90px; opacity: 0.6; }
+            .cam-box:hover { opacity: 1; }
         }
     </style>
 </head>
@@ -82,192 +213,332 @@
 
 <header>
     <div class="couple-names">Wyandhanu <i class="fas fa-heart heart-icon"></i> Maha</div>
-    <div id="statusBadge" style="font-size:0.8rem; color:#94a3b8;">Offline</div>
+    <div id="statusBadge" style="font-size:0.7rem; color:#94a3b8; background:#1e293b; padding:4px 8px; border-radius:10px;">Offline</div>
 </header>
 
 <div class="main-stage">
-    <div class="placeholder-text"><i class="fas fa-film" style="font-size: 3rem; margin-bottom:10px;"></i><br>Layar Film Akan Muncul Di Sini</div>
+    <div class="placeholder-text">
+        <i class="fas fa-film" style="font-size: 3rem; margin-bottom:10px;"></i><br>
+        Menunggu Koneksi...
+    </div>
+    
     <video id="screenVideo" autoplay playsinline></video>
+
     <div class="cam-container">
-        <div class="cam-box"><video id="myCam" autoplay playsinline muted></video><div class="cam-label">Saya</div></div>
-        <div class="cam-box"><video id="partnerCam" autoplay playsinline></video><div class="cam-label">Pasangan</div></div>
+        <div class="cam-box">
+            <video id="myCam" autoplay playsinline muted></video>
+            <div class="cam-label">Saya</div>
+        </div>
+        <div class="cam-box">
+            <video id="partnerCam" autoplay playsinline></video>
+            <div class="cam-label">Pasangan</div>
+        </div>
     </div>
 </div>
 
 <div id="connectPanel" class="connection-panel">
-    <h3>Mulai Nobar 🍿</h3>
-    <input type="text" id="partnerIdInput" placeholder="Tempel ID Pasangan di sini...">
-    <button onclick="handleConnectButton()" class="btn-control active" style="width:100%; border-radius:8px; height:45px; font-size:1rem; margin-top:10px;">Hubungkan</button>
-    <div class="id-display" onclick="copyMyId()">ID Kamu: <span id="myId" style="color:var(--accent); font-weight:bold;">Generating...</span></div>
+    <h3 style="margin-top:0;">Mulai Nobar 🍿</h3>
+    <input type="text" id="partnerIdInput" placeholder="Tempel ID Pasangan disini...">
+    
+    <button onclick="handleConnectButton()" class="btn-control active" style="width:100%; border-radius:8px; height:45px; font-size:1rem; margin-top:10px;">
+        Hubungkan Sekarang
+    </button>
+    
+    <div class="id-display" onclick="copyMyId()" style="margin-top:15px; padding:10px; border:1px dashed #475569; border-radius:8px; cursor:pointer;">
+        <div style="font-size:0.8rem; color:#94a3b8;">ID Kamu (Klik Salin):</div>
+        <div id="myId" style="color:var(--accent); font-weight:bold; word-break:break-all;">Generating...</div>
+    </div>
 </div>
 
 <div class="control-bar">
     <button id="btnMic" onclick="toggleMic()" class="btn-control"><i class="fas fa-microphone-slash"></i></button>
+    
+    <button onclick="endCall()" class="btn-control btn-hangup" title="Putuskan Jaringan">
+        <i class="fas fa-phone-slash"></i>
+    </button>
+
     <button id="btnCam" onclick="toggleCam()" class="btn-control"><i class="fas fa-video-slash"></i></button>
-    <button onclick="startScreenShare()" class="btn-control active" style="background-color: var(--accent);"><i class="fas fa-desktop"></i></button>
+    
+    <button onclick="startScreenShare()" class="btn-control active" style="background-color: var(--accent); margin-left:10px;" title="Share Screen">
+        <i class="fas fa-desktop"></i>
+    </button>
 </div>
 
 <script>
-    const peer = new Peer(undefined, { debug: 1, config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
+    // --- KONFIGURASI CROSS-PLATFORM ---
+    // Menggunakan banyak STUN server agar HP (4G) bisa tembus ke WiFi
+    const peerConfig = {
+        debug: 1,
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' } 
+            ]
+        }
+    };
+
+    const peer = new Peer(undefined, peerConfig);
+    
+    // UI Elements
     const myIdEl = document.getElementById('myId');
     const connectPanel = document.getElementById('connectPanel');
     const statusBadge = document.getElementById('statusBadge');
+    
+    // Video Elements
     const screenVideo = document.getElementById('screenVideo');
     const myCamVideo = document.getElementById('myCam');
     const partnerCamVideo = document.getElementById('partnerCam');
 
+    // State Variables
     let myCamStream = null;
+    let activeCall = null;      // Menyimpan objek Call aktif
+    let activeConn = null;      // Menyimpan koneksi data (opsional)
     let isMicOn = false;
     let isCamOn = false;
 
+    // 1. SAAT PEER SIAP (DAPAT ID)
     peer.on('open', (id) => {
         myIdEl.innerText = id;
-        statusBadge.innerText = "Menunggu Pasangan...";
+        statusBadge.innerText = "Standby (Bagikan ID)";
+        statusBadge.style.color = "#94a3b8";
     });
 
+    // 2. SAAT MENERIMA TELEPON (DARI HP/LAPTOP PASANGAN)
     peer.on('call', (call) => {
-        const callType = call.metadata ? call.metadata.type : 'face'; 
+        // Jika sedang ada call lain, tolak atau tutup yg lama (opsional)
+        // Disini kita terima saja.
+        
+        const callType = call.metadata ? call.metadata.type : 'face';
+
         if (callType === 'screen') {
-            call.answer(); 
+            // TERIMA SHARE SCREEN
+            call.answer();
             call.on('stream', (stream) => {
                 screenVideo.srcObject = stream;
-                statusBadge.innerText = "Sedang Menonton Film";
-                statusBadge.style.color = "#4ade80";
+                statusBadge.innerText = "Menonton Film";
+                statusBadge.style.color = "#4ade80"; // Hijau
                 connectPanel.classList.add('hidden');
             });
+            call.on('close', () => {
+                screenVideo.srcObject = null;
+            });
         } else {
-            // Jika ada panggilan masuk, coba nyalakan kamera kita
+            // TERIMA VIDEO CALL (WAJAH)
+            activeCall = call; // Simpan referensi call untuk tombol 'Putus'
+            
+            // Coba nyalakan kamera kita untuk menjawab
             requestCameraAndMic()
                 .then(stream => {
-                    call.answer(stream);
+                    call.answer(stream); // Jawab dengan video kita
+                    updateUIConnected();
                 })
                 .catch(() => {
-                    // Jika gagal (device in use), jawab tanpa stream (audio only atau cuma nonton)
-                    call.answer(); 
-                    alert("Kamera/Mic Anda sibuk/terblokir. Anda tetap bisa menonton film, tapi pasangan tidak bisa melihat/mendengar Anda.");
+                    call.answer(); // Jawab tanpa video jika error
+                    updateUIConnected();
                 });
             
             call.on('stream', (remoteStream) => {
                 partnerCamVideo.srcObject = remoteStream;
-                statusBadge.innerText = "Terhubung ❤️";
-                connectPanel.classList.add('hidden');
+                // Hack untuk Mobile Browser: kadang video butuh trigger play
+                partnerCamVideo.play().catch(e => console.log("Autoplay handled"));
             });
+
+            call.on('close', () => handleRemoteHangup());
         }
     });
 
-    // Wrapper untuk handle Connect Button
+    // --- FUNGSI UTAMA ---
+
     function handleConnectButton() {
         const partnerId = document.getElementById('partnerIdInput').value.trim();
-        if(!partnerId) return alert("Masukkan ID dulu!");
-        
+        if(!partnerId) return alert("Mohon isi ID Pasangan.");
+
         statusBadge.innerText = "Menghubungi...";
         
-        // Coba akses kamera dulu sebelum nelpon
+        // Nyalakan kamera dulu
         requestCameraAndMic()
             .then(stream => {
-                // Sukses akses kamera, mulai call dengan stream
+                // Mulai Panggilan Video
                 const call = peer.call(partnerId, stream, { metadata: { type: 'face' } });
-                handleCallStream(call);
+                activeCall = call;
+                
+                call.on('stream', (remoteStream) => {
+                    partnerCamVideo.srcObject = remoteStream;
+                    partnerCamVideo.play().catch(e => console.log("Autoplay handled"));
+                    updateUIConnected();
+                });
+                
+                call.on('close', () => handleRemoteHangup());
+                call.on('error', (e) => alert("Koneksi gagal: " + e));
             })
             .catch(err => {
-                // Gagal akses kamera (Device in use), tawarkan opsi
-                const proceed = confirm("Gagal akses kamera (Device in use/Error). Lanjut tanpa kamera/mic?");
-                if(proceed) {
-                    // Call tanpa stream (Null)
-                    const call = peer.call(partnerId, null, { metadata: { type: 'face' } });
-                    handleCallStream(call);
+                // Jika kamera gagal, tanya user mau lanjut audio only?
+                if(confirm("Gagal akses kamera. Lanjut koneksi suara saja?")) {
+                     const call = peer.call(partnerId, null, { metadata: { type: 'face' } });
+                     activeCall = call;
+                     call.on('stream', (remoteStream) => {
+                        partnerCamVideo.srcObject = remoteStream;
+                        updateUIConnected();
+                     });
                 } else {
-                    statusBadge.innerText = "Koneksi dibatalkan.";
+                    statusBadge.innerText = "Batal.";
                 }
             });
     }
 
-    function handleCallStream(call) {
-        call.on('stream', (remoteStream) => {
-            partnerCamVideo.srcObject = remoteStream;
-            statusBadge.innerText = "Terhubung ❤️";
-            statusBadge.style.color = "#4ade80";
-            connectPanel.classList.add('hidden');
-        });
-        call.on('close', () => alert("Panggilan berakhir"));
-    }
+    // FUNGSI SHARE SCREEN (KHUSUS LAPTOP/PC)
+    async function startScreenShare() {
+        const partnerId = document.getElementById('partnerIdInput').value.trim();
+        // Cek apakah user pakai HP? (HP tidak bisa share screen biasanya)
+        if(window.innerWidth < 768) {
+            alert("Fitur Share Screen sebaiknya dilakukan dari Laptop/PC Host.");
+            // Tapi tetap kita izinkan coba
+        }
 
-    // Fungsi Request Camera yang Aman (Try Catch)
-    async function requestCameraAndMic() {
+        if (!partnerId && !activeCall) return alert("Sambungkan hubungan wajah dulu baru share screen.");
+        
+        // Jika partnerId kosong tapi activeCall ada, ambil ID dari activeCall (agak tricky di PeerJS)
+        // Jadi kita paksa user isi input ID agar aman.
+        if (!partnerId) return alert("Pastikan ID Pasangan tertulis di kotak input.");
+
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            myCamStream = stream;
-            myCamVideo.srcObject = stream;
-            updateCamMicState(true, true);
-            return stream;
-        } catch (err) {
-            console.error("Camera Error:", err);
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { cursor: "always" },
+                audio: { echoCancellation: false, noiseSuppression: false } // Audio film murni
+            });
+
+            screenVideo.srcObject = stream;
+            screenVideo.muted = true; // Host mute lokal
+
+            const call = peer.call(partnerId, stream, { metadata: { type: 'screen' } });
             
-            // Jika gagal video+audio, coba audio saja (siapa tau cuma kamera yg rusak)
-            try {
-                const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-                myCamStream = audioStream;
-                updateCamMicState(false, true);
-                alert("Kamera gagal/sibuk, beralih ke Mode Suara saja.");
-                return audioStream;
-            } catch (err2) {
-                // Gagal total
-                throw new Error("Device in use");
-            }
+            // Tombol Stop Bawaan Browser
+            stream.getVideoTracks()[0].onended = () => {
+                call.close();
+                screenVideo.srcObject = null;
+            };
+
+        } catch (err) {
+            console.error(err);
         }
     }
 
-    async function startScreenShare() {
-        const partnerId = document.getElementById('partnerIdInput').value.trim();
-        if (!partnerId) return alert("Belum ada ID pasangan. Hubungkan dulu.");
+    // --- FITUR PUTUSKAN JARINGAN (HANGUP) ---
+    function endCall() {
+        if (!activeCall && !screenVideo.srcObject && !myCamStream) {
+            return alert("Tidak ada koneksi aktif.");
+        }
+
+        // 1. Matikan Call PeerJS
+        if (activeCall) {
+            activeCall.close();
+            activeCall = null;
+        }
+
+        // 2. Matikan Kamera & Mic Sendiri (Penting agar lampu webcam mati)
+        if (myCamStream) {
+            myCamStream.getTracks().forEach(track => track.stop());
+            myCamStream = null;
+        }
+
+        // 3. Reset Video Elements
+        myCamVideo.srcObject = null;
+        partnerCamVideo.srcObject = null;
+        screenVideo.srcObject = null;
+
+        // 4. Reset UI
+        connectPanel.classList.remove('hidden'); // Munculkan panel login lagi
+        statusBadge.innerText = "Terputus";
+        statusBadge.style.color = "#ef4444"; // Merah
+        
+        // Reset tombol icon
+        updateCamMicState(false, false);
+    }
+
+    function handleRemoteHangup() {
+        alert("Pasangan memutuskan hubungan.");
+        endCall();
+    }
+
+    // --- HELPER KAMERA & MIC ---
+    
+    async function requestCameraAndMic() {
         try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { cursor: "always", width: { ideal: 1920 } },
-                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
-            });
-            screenVideo.srcObject = stream;
-            screenVideo.muted = true; 
-            const call = peer.call(partnerId, stream, { metadata: { type: 'screen' } });
-            stream.getVideoTracks()[0].onended = () => { call.close(); screenVideo.srcObject = null; };
-        } catch (err) { console.error(err); }
+            // Constraint khusus Mobile: prefer kamera depan
+            const constraints = { 
+                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, // Ringan buat HP
+                audio: true 
+            };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            myCamStream = stream;
+            myCamVideo.srcObject = stream;
+            myCamVideo.muted = true; // Mute diri sendiri agar tidak feedback
+            
+            updateCamMicState(true, true);
+            return stream;
+        } catch (err) {
+            throw err;
+        }
     }
 
     function toggleMic() {
         if (!myCamStream) return;
-        const audioTrack = myCamStream.getAudioTracks()[0];
-        if (audioTrack) {
-            audioTrack.enabled = !audioTrack.enabled;
-            isMicOn = audioTrack.enabled;
-            updateBtnIcon('btnMic', isMicOn, 'fa-microphone', 'fa-microphone-slash');
+        const track = myCamStream.getAudioTracks()[0];
+        if(track) {
+            track.enabled = !track.enabled;
+            updateBtnIcon('btnMic', track.enabled, 'fa-microphone', 'fa-microphone-slash');
         }
     }
 
     function toggleCam() {
         if (!myCamStream) return;
-        const videoTrack = myCamStream.getVideoTracks()[0];
-        if (videoTrack) {
-            videoTrack.enabled = !videoTrack.enabled;
-            isCamOn = videoTrack.enabled;
-            updateBtnIcon('btnCam', isCamOn, 'fa-video', 'fa-video-slash');
+        const track = myCamStream.getVideoTracks()[0];
+        if(track) {
+            track.enabled = !track.enabled;
+            updateBtnIcon('btnCam', track.enabled, 'fa-video', 'fa-video-slash');
         }
     }
 
-    function updateCamMicState(cam, mic) {
-        isCamOn = cam; isMicOn = mic;
-        updateBtnIcon('btnCam', isCamOn, 'fa-video', 'fa-video-slash');
-        updateBtnIcon('btnMic', isMicOn, 'fa-microphone', 'fa-microphone-slash');
-    }
-
-    function updateBtnIcon(btnId, isActive, iconOn, iconOff) {
-        const btn = document.getElementById(btnId);
-        const icon = btn.querySelector('i');
-        if (isActive) { btn.classList.add('active'); icon.classList.remove(iconOff); icon.classList.add(iconOn); } 
-        else { btn.classList.remove('active'); icon.classList.remove(iconOn); icon.classList.add(iconOff); }
-    }
-
-    function copyMyId() { navigator.clipboard.writeText(myIdEl.innerText); alert("ID Disalin!"); }
+    // --- UI HELPERS ---
     
-    screenVideo.addEventListener('dblclick', () => { if(screenVideo.requestFullscreen) screenVideo.requestFullscreen(); });
+    function updateUIConnected() {
+        statusBadge.innerText = "Terhubung ❤️";
+        statusBadge.style.color = "#4ade80";
+        connectPanel.classList.add('hidden'); // Sembunyikan panel ID
+    }
+
+    function updateCamMicState(cam, mic) {
+        updateBtnIcon('btnCam', cam, 'fa-video', 'fa-video-slash');
+        updateBtnIcon('btnMic', mic, 'fa-microphone', 'fa-microphone-slash');
+    }
+
+    function updateBtnIcon(id, isActive, onIcon, offIcon) {
+        const btn = document.getElementById(id);
+        const i = btn.querySelector('i');
+        if (isActive) {
+            btn.classList.add('active');
+            i.className = `fas ${onIcon}`;
+        } else {
+            btn.classList.remove('active');
+            i.className = `fas ${offIcon}`;
+        }
+    }
+
+    function copyMyId() {
+        navigator.clipboard.writeText(myIdEl.innerText);
+        alert("ID berhasil disalin! Kirim ke HP/Laptop pasangan.");
+    }
+    
+    // Double click untuk fullscreen film
+    screenVideo.addEventListener('dblclick', () => {
+        if(screenVideo.requestFullscreen) screenVideo.requestFullscreen();
+        else if(screenVideo.webkitRequestFullscreen) screenVideo.webkitRequestFullscreen(); // Safari Support
+    });
+
 </script>
 </body>
 </html>
