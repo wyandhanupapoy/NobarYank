@@ -74,7 +74,26 @@ const WatchParty = () => {
     // Pisahkan baris
     const lines = sdp.split('\n');
     const cleanedLines = [];
+    const validPayloadTypes = new Set();
 
+    // First pass: collect valid payload types from media lines
+    for (const line of lines) {
+      if (line.startsWith('m=')) {
+        // Extract payload types from media line
+        // Format: m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8
+        const parts = line.split(' ');
+        for (let i = 3; i < parts.length; i++) {
+          const pt = parts[i].trim();
+          if (pt && /^\d+$/.test(pt)) {
+            validPayloadTypes.add(pt);
+          }
+        }
+      }
+    }
+
+    console.log('Valid payload types:', Array.from(validPayloadTypes).join(', '));
+
+    // Second pass: filter lines based on valid payload types
     for (const line of lines) {
       // Skip baris kosong
       if (!line.trim()) continue;
@@ -83,18 +102,42 @@ const WatchParty = () => {
       if (line.includes('a=max-message-size')) continue;
       if (line.includes('a=extmap-allow-mixed')) continue;
       if (line.includes('a=msid-semantic')) continue;
+      if (line.includes('ice-options') && line.includes('trickle')) continue;
+
+      // Filter rtpmap lines - only keep if payload type is valid
+      if (line.startsWith('a=rtpmap:')) {
+        const match = line.match(/^a=rtpmap:(\d+)/);
+        if (match && !validPayloadTypes.has(match[1])) {
+          console.log('Skipping orphaned rtpmap:', line);
+          continue;
+        }
+      }
+
+      // Filter rtcp-fb lines - only keep if payload type is valid
+      if (line.startsWith('a=rtcp-fb:')) {
+        const match = line.match(/^a=rtcp-fb:(\d+)/);
+        if (match && !validPayloadTypes.has(match[1])) {
+          console.log('Skipping orphaned rtcp-fb:', line);
+          continue;
+        }
+      }
 
       // Validasi dan bersihkan baris fmtp
       if (line.startsWith('a=fmtp:')) {
-        // Format valid: a=fmtp:PAYLOAD_TYPE PARAMETER=VALUE;...
         const fmtpMatch = line.match(/^a=fmtp:(\d+)\s+(.+)$/);
         if (!fmtpMatch) {
-          // Baris fmtp tidak valid, skip
           console.log('Skipping invalid fmtp line:', line);
           continue;
         }
 
         const payloadType = fmtpMatch[1];
+
+        // Skip if payload type not in valid list
+        if (!validPayloadTypes.has(payloadType)) {
+          console.log('Skipping orphaned fmtp:', line);
+          continue;
+        }
+
         let parameters = fmtpMatch[2];
 
         // Hapus parameter bermasalah
@@ -117,11 +160,6 @@ const WatchParty = () => {
         if (finalCleaned.trim()) {
           cleanedLines.push(finalCleaned);
         }
-        continue;
-      }
-
-      // Hapus baris dengan ice-options jika ada masalah
-      if (line.includes('ice-options') && line.includes('trickle')) {
         continue;
       }
 
