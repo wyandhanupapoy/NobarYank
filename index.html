@@ -2,233 +2,468 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nobar Private Vercel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wyandhanu & Maha - Private Cinema</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
+        :root {
+            --bg-dark: #0f172a;
+            --primary: #f43f5e; /* Pink-ish Red for Couple Theme */
+            --accent: #3b82f6;
+            --glass: rgba(15, 23, 42, 0.85);
+            --text: #f8fafc;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background-color: #0f172a;
-            color: white;
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text);
+            margin: 0;
+            height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden; /* Mencegah scroll berlebih */
+        }
+
+        /* --- Header Khusus Couple --- */
+        header {
+            padding: 15px 20px;
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
+            z-index: 50;
         }
-        .container {
-            width: 90%;
-            max-width: 1200px;
-            text-align: center;
+
+        .couple-names {
+            font-size: 1rem;
+            font-weight: 600;
         }
-        .video-wrapper {
+        .couple-names span { color: var(--primary); }
+        .heart-icon { color: var(--primary); margin: 0 5px; animation: heartbeat 1.5s infinite; }
+
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        /* --- Layout Utama --- */
+        .main-stage {
+            flex: 1;
             position: relative;
-            width: 100%;
-            aspect-ratio: 16/9;
-            background: #000;
-            border-radius: 12px;
-            overflow: hidden;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: black;
         }
-        video {
+
+        /* Layar Film (Screen Share) */
+        #screenVideo {
             width: 100%;
             height: 100%;
+            max-height: 80vh;
             object-fit: contain;
         }
-        .controls {
+
+        .placeholder-text {
+            position: absolute;
+            color: #64748b;
+            text-align: center;
+            z-index: 0;
+        }
+
+        /* --- Floating Cams (Wajah) --- */
+        .cam-container {
+            position: absolute;
+            bottom: 100px; /* Di atas control bar */
+            right: 20px;
             display: flex;
+            flex-direction: column;
             gap: 10px;
-            justify-content: center;
-            flex-wrap: wrap;
-            background: #1e293b;
-            padding: 20px;
+            z-index: 20;
+        }
+
+        .cam-box {
+            width: 120px;
+            height: 120px; /* Kotak/Lingkaran */
+            background: #333;
             border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid rgba(255,255,255,0.2);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            position: relative;
+            transition: all 0.3s;
         }
-        input {
-            padding: 10px;
-            border-radius: 6px;
-            border: 1px solid #334155;
-            background: #0f172a;
-            color: white;
-            width: 200px;
+
+        .cam-box video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror effect untuk kamera sendiri */
         }
-        button {
-            padding: 10px 20px;
-            border-radius: 6px;
+
+        .cam-label {
+            position: absolute;
+            bottom: 2px;
+            left: 0; 
+            width: 100%;
+            font-size: 10px;
+            background: rgba(0,0,0,0.6);
+            text-align: center;
+            padding: 2px;
+        }
+
+        /* --- Control Bar Bawah --- */
+        .control-bar {
+            padding: 15px;
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            z-index: 50;
+        }
+
+        .btn-control {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
             border: none;
+            background: #334155;
+            color: white;
+            font-size: 1.2rem;
             cursor: pointer;
-            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             transition: 0.2s;
         }
-        .btn-primary { background-color: #3b82f6; color: white; }
-        .btn-primary:hover { background-color: #2563eb; }
-        .btn-success { background-color: #22c55e; color: white; }
-        .btn-danger { background-color: #ef4444; color: white; }
-        
-        #myIdDisplay {
-            margin-top: 10px;
-            font-size: 0.9em;
+
+        .btn-control:hover { transform: scale(1.1); }
+        .btn-control.active { background: var(--primary); box-shadow: 0 0 15px var(--primary); }
+        .btn-control.secondary { background: var(--accent); }
+
+        /* Input ID Panel */
+        .connection-panel {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 23, 42, 0.95);
+            padding: 30px;
+            border-radius: 20px;
+            border: 1px solid #334155;
+            text-align: center;
+            z-index: 100;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+
+        .connection-panel.hidden { display: none; }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            background: #1e293b;
+            color: white;
+            text-align: center;
+        }
+
+        .id-display {
+            font-size: 0.9rem;
             color: #94a3b8;
+            margin-top: 15px;
+            cursor: pointer;
+            padding: 5px;
+            border: 1px dashed #475569;
+            border-radius: 6px;
         }
-        .status {
-            margin-bottom: 10px;
-            font-weight: bold;
-            color: #fbbf24;
+
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            .cam-container {
+                flex-direction: row; /* Jejer ke samping kalau di HP */
+                bottom: 90px;
+                right: 10px;
+                left: 10px;
+                justify-content: center;
+            }
+            .cam-box { width: 80px; height: 80px; border-radius: 50%; }
+            .couple-names { font-size: 0.8rem; }
+            header { padding: 10px; }
         }
+
+        /* Landscape Mode Mobile */
+        @media (max-height: 500px) and (orientation: landscape) {
+            header, .control-bar { opacity: 0; transition: opacity 0.5s; }
+            header:hover, .control-bar:hover { opacity: 1; }
+            .cam-container { right: 10px; bottom: 10px; flex-direction: column; }
+            .cam-box { width: 100px; height: 100px; opacity: 0.8; }
+        }
+
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>🎬 Nobar Bareng Pasangan (P2P)</h2>
-    <div id="status" class="status">Menunggu inisialisasi...</div>
-
-    <div class="video-wrapper">
-        <video id="remoteVideo" autoplay playsinline></video>
+<header>
+    <div class="couple-names">
+        Wyandhanu <i class="fas fa-heart heart-icon"></i> Maha
     </div>
+    <div id="statusBadge" style="font-size:0.8rem; color:#94a3b8;">Offline</div>
+</header>
 
-    <div class="controls">
-        <div id="connectionPanel">
-            <input type="text" id="partnerIdInput" placeholder="Masukkan ID Pasangan">
-            <button onclick="connectToPartner()" class="btn-primary">Hubungkan</button>
+<div class="main-stage">
+    <div class="placeholder-text">
+        <i class="fas fa-film" style="font-size: 3rem; margin-bottom:10px;"></i><br>
+        Layar Film Akan Muncul Di Sini
+    </div>
+    <video id="screenVideo" autoplay playsinline></video>
+
+    <div class="cam-container">
+        <div class="cam-box">
+            <video id="myCam" autoplay playsinline muted></video>
+            <div class="cam-label">Saya</div>
         </div>
-
-        <button onclick="startScreenShare()" class="btn-success">🖥️ Share Screen & Audio</button>
+        <div class="cam-box">
+            <video id="partnerCam" autoplay playsinline></video>
+            <div class="cam-label">Pasangan</div>
+        </div>
     </div>
+</div>
 
-    <div id="myIdDisplay">ID Kamu: <span id="myId" style="color:white; font-weight:bold;">Generating...</span></div>
+<div id="connectPanel" class="connection-panel">
+    <h3>Mulai Nobar 🍿</h3>
+    <input type="text" id="partnerIdInput" placeholder="Tempel ID Pasangan di sini...">
+    <button onclick="connectToPartner()" class="btn-control secondary" style="width:100%; border-radius:8px; height:45px; font-size:1rem; margin-top:10px;">
+        Hubungkan
+    </button>
+    
+    <div class="id-display" onclick="copyMyId()">
+        ID Kamu: <span id="myId" style="color:var(--accent); font-weight:bold;">Generating...</span><br>
+        (Klik untuk Salin)
+    </div>
+</div>
+
+<div class="control-bar">
+    <button id="btnMic" onclick="toggleMic()" class="btn-control">
+        <i class="fas fa-microphone-slash"></i>
+    </button>
+    
+    <button id="btnCam" onclick="toggleCam()" class="btn-control">
+        <i class="fas fa-video-slash"></i>
+    </button>
+
+    <button onclick="startScreenShare()" class="btn-control active" style="background-color: var(--accent);">
+        <i class="fas fa-desktop"></i>
+    </button>
 </div>
 
 <script>
-    const statusEl = document.getElementById('status');
-    const myIdEl = document.getElementById('myId');
-    const remoteVideo = document.getElementById('remoteVideo');
-    
-    // Inisialisasi PeerJS
-    // Menggunakan server cloud PeerJS gratis (cukup untuk 2 orang)
-    // GANTI BAGIAN "const peer = ..." YANG LAMA DENGAN INI:
-    
+    // --- VARIABLES ---
     const peer = new Peer(undefined, {
-        debug: 2,
-        config: {
-            iceServers: [
-                // Server STUN Google (Gratis & Stabil) untuk menembus NAT
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
-            ]
+        debug: 1,
+        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+    });
+
+    const myIdEl = document.getElementById('myId');
+    const connectPanel = document.getElementById('connectPanel');
+    const statusBadge = document.getElementById('statusBadge');
+    
+    // Video Elements
+    const screenVideo = document.getElementById('screenVideo'); // Layar Film
+    const myCamVideo = document.getElementById('myCam'); // Wajah Sendiri
+    const partnerCamVideo = document.getElementById('partnerCam'); // Wajah Pasangan
+
+    let myCamStream = null;
+    let screenStream = null;
+    let currentCall = null;
+    let isMicOn = false;
+    let isCamOn = false;
+
+    // --- PEERJS EVENTS ---
+
+    peer.on('open', (id) => {
+        myIdEl.innerText = id;
+        statusBadge.innerText = "Menunggu Pasangan...";
+    });
+
+    // MENERIMA PANGGILAN (Bisa Screen Share atau Video Call)
+    peer.on('call', (call) => {
+        // Cek Metadata: Apakah ini panggilan Screen atau Wajah?
+        const callType = call.metadata ? call.metadata.type : 'face'; 
+
+        if (callType === 'screen') {
+            // Ini adalah Share Screen dari Pasangan
+            call.answer(); // Jawab tanpa kirim balik stream
+            call.on('stream', (stream) => {
+                screenVideo.srcObject = stream;
+                statusBadge.innerText = "Sedang Menonton Film";
+                statusBadge.style.color = "#4ade80";
+                connectPanel.classList.add('hidden'); // Sembunyikan panel jika film mulai
+            });
+        } else {
+            // Ini adalah Video Call (Wajah & Suara)
+            // Jawab dengan stream kamera kita (jika sudah nyala)
+            // Agar komunikasi 2 arah terjadi
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then((stream) => {
+                // Simpan stream kita biar bisa di-mute/off kan nanti
+                myCamStream = stream;
+                myCamVideo.srcObject = stream;
+                
+                // Pastikan state tombol sesuai (awal nyala)
+                updateCamMicState(true, true);
+
+                call.answer(stream); // Jawab sambil kirim wajah kita
+            })
+            .catch(err => {
+                console.log("User menolak akses kamera, jawab audio saja/kosong");
+                call.answer(); 
+            });
+
+            call.on('stream', (remoteStream) => {
+                partnerCamVideo.srcObject = remoteStream;
+                statusBadge.innerText = "Terhubung (Video & Audio)";
+                connectPanel.classList.add('hidden');
+            });
         }
     });
 
-    let myStream = null;
-    let conn = null;
+    // --- FUNCTIONS ---
 
-    // 1. Saat Peer siap dan mendapat ID unik
-    peer.on('open', (id) => {
-        myIdEl.innerText = id;
-        statusEl.innerText = "Siap! Berikan ID Kamu ke pasangan atau masukkan ID pasangan.";
-    });
-
-    // 2. Jika ada yang menelepon (Pasangan connect ke kita)
-    peer.on('call', (call) => {
-        // Jawab panggilan (kita tidak perlu kirim stream dulu, nanti share screen manual)
-        call.answer(); 
-        
-        call.on('stream', (remoteStream) => {
-            // Tampilkan stream lawan (jika dia share screen)
-            remoteVideo.srcObject = remoteStream;
-        });
-        
-        statusEl.innerText = "Terhubung dengan pasangan!";
-        statusEl.style.color = "#22c55e";
-    });
-
-    // 3. Fungsi menghubungkan ke pasangan (Caller)
+    // 1. Logic Menghubungkan (Cukup sekali diawal)
     function connectToPartner() {
-        const partnerId = document.getElementById('partnerIdInput').value;
-        if (!partnerId) return alert("Masukkan ID pasangan dulu!");
+        const partnerId = document.getElementById('partnerIdInput').value.trim();
+        if(!partnerId) return alert("Masukkan ID dulu!");
+        
+        // Kita pancing koneksi dengan Video Call dulu agar dua arah
+        // Saat tombol hubungkan ditekan, kita inisiasi Video Call
+        startVideoCall(partnerId);
+    }
 
-        statusEl.innerText = "Menghubungi...";
+    // 2. Memulai Video Call (Wajah & Suara)
+    function startVideoCall(partnerId) {
+        statusBadge.innerText = "Menghubungi...";
         
-        // Kita telepon dia. Awalnya kirim dummy stream atau kosong
-        // Di sini kita inisiasi koneksi data dulu agar stabil
-        const conn = peer.connect(partnerId);
-        
-        conn.on('open', () => {
-            statusEl.innerText = "Terhubung dengan pasangan!";
-            statusEl.style.color = "#22c55e";
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+            myCamStream = stream;
+            myCamVideo.srcObject = stream;
+            updateCamMicState(true, true); // Aktifkan UI
+
+            // Telepon Pasangan dengan metadata 'face'
+            const call = peer.call(partnerId, stream, { metadata: { type: 'face' } });
+            
+            call.on('stream', (remoteStream) => {
+                partnerCamVideo.srcObject = remoteStream;
+                statusBadge.innerText = "Terhubung Bersama ❤️";
+                statusBadge.style.color = "#4ade80";
+                connectPanel.classList.add('hidden');
+            });
+            
+            call.on('error', (err) => alert("Gagal call: " + err));
+        })
+        .catch(err => {
+            alert("Gagal akses kamera/mic: " + err.message);
         });
     }
 
-    // 4. Fungsi Share Screen
-    // GANTI FUNGSI startScreenShare DENGAN INI:
+    // 3. Share Screen (Terpisah dari Video Call)
     async function startScreenShare() {
+        const partnerId = document.getElementById('partnerIdInput').value.trim();
+        // Coba ambil ID dari koneksi yang sudah ada (agak tricky di PeerJS simple), 
+        // jadi kita andalkan inputan yang masih ada di kolom text.
+        
+        if (!partnerId) return alert("Pastikan sudah terhubung/isi ID pasangan untuk Share Screen.");
+
         try {
-            const partnerId = document.getElementById('partnerIdInput').value;
-            
-            // Validasi dulu sebelum share
-            if (!partnerId) {
-                alert("Mohon masukkan ID pasangan di kolom input TERLEBIH DAHULU agar koneksi stabil.");
-                return;
-            }
-
-            // Meminta akses layar dengan CONSTRAINT 1080p
+            // Audio: true disini adalah AUDIO SYSTEM (Suara Film), bukan Mic.
             const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    cursor: "always",
-                    // Memaksa resolusi 1080p
-                    width: { ideal: 1920, max: 1920, min: 1280 },
-                    height: { ideal: 1080, max: 1080, min: 720 },
-                    // Frame rate 30fps cukup untuk film (60fps akan sangat berat di bandwidth)
-                    frameRate: { ideal: 30, max: 60 }, 
-                    displaySurface: "browser" // Prioritaskan share tab browser
-                },
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false,
-                    sampleRate: 44100
-                }
+                video: { cursor: "always", width: { ideal: 1920 } },
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
             });
 
-            myStream = stream;
-            statusEl.innerText = "Kualitas diset ke 1080p. Menghubungkan video...";
+            screenVideo.srcObject = stream;
+            screenVideo.muted = true; // Host mute film sendiri biar ga feedback
 
-            // PENTING: Menambahkan opsi bandwidth agar tidak burik (blocky)
-            const call = peer.call(partnerId, stream, {
-                metadata: { type: 'screen-share' }
-            });
-
-            // Hack kecil untuk menjaga koneksi tetap hidup saat bandwidth tinggi
-            call.on('close', () => {
-                statusEl.innerText = "Share screen berhenti.";
-            });
+            // Call partner KHUSUS untuk share screen (metadata: screen)
+            const call = peer.call(partnerId, stream, { metadata: { type: 'screen' } });
             
-            // Jika tombol stop bawaan browser ditekan
             stream.getVideoTracks()[0].onended = () => {
-                statusEl.innerText = "Share screen berhenti.";
                 call.close();
+                screenVideo.srcObject = null;
             };
 
         } catch (err) {
-            console.error("Gagal share screen:", err);
-            alert("Gagal: " + err.message);
+            console.error(err);
         }
     }
-    // Klik 2x pada video untuk Fullscreen
-    remoteVideo.addEventListener('dblclick', () => {
-        if (remoteVideo.requestFullscreen) {
-            remoteVideo.requestFullscreen();
-        } else if (remoteVideo.webkitRequestFullscreen) { /* Safari */
-            remoteVideo.webkitRequestFullscreen();
-        } else if (remoteVideo.msRequestFullscreen) { /* IE11 */
-            remoteVideo.msRequestFullscreen();
+
+    // --- CONTROLS (Mic/Cam) ---
+
+    function toggleMic() {
+        if (!myCamStream) return alert("Koneksi video belum dimulai. Klik 'Hubungkan' dulu.");
+        const audioTrack = myCamStream.getAudioTracks()[0];
+        if (audioTrack) {
+            audioTrack.enabled = !audioTrack.enabled;
+            isMicOn = audioTrack.enabled;
+            updateBtnIcon('btnMic', isMicOn, 'fa-microphone', 'fa-microphone-slash');
         }
+    }
+
+    function toggleCam() {
+        if (!myCamStream) return alert("Koneksi video belum dimulai.");
+        const videoTrack = myCamStream.getVideoTracks()[0];
+        if (videoTrack) {
+            videoTrack.enabled = !videoTrack.enabled;
+            isCamOn = videoTrack.enabled;
+            updateBtnIcon('btnCam', isCamOn, 'fa-video', 'fa-video-slash');
+        }
+    }
+
+    function updateCamMicState(cam, mic) {
+        isCamOn = cam;
+        isMicOn = mic;
+        updateBtnIcon('btnCam', isCamOn, 'fa-video', 'fa-video-slash');
+        updateBtnIcon('btnMic', isMicOn, 'fa-microphone', 'fa-microphone-slash');
+    }
+
+    function updateBtnIcon(btnId, isActive, iconOn, iconOff) {
+        const btn = document.getElementById(btnId);
+        const icon = btn.querySelector('i');
+        if (isActive) {
+            btn.classList.add('active');
+            icon.classList.remove(iconOff);
+            icon.classList.add(iconOn);
+        } else {
+            btn.classList.remove('active');
+            icon.classList.remove(iconOn);
+            icon.classList.add(iconOff);
+        }
+    }
+
+    // Copy ID Helper
+    function copyMyId() {
+        navigator.clipboard.writeText(myIdEl.innerText);
+        alert("ID Disalin!");
+    }
+
+    // Double click fullscreen
+    screenVideo.addEventListener('dblclick', () => {
+        if(screenVideo.requestFullscreen) screenVideo.requestFullscreen();
     });
+
 </script>
 
 </body>
