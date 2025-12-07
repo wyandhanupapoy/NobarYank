@@ -7,14 +7,14 @@ import { useSync } from '@/hooks/useSync';
 import { sendSignal, subscribeToRoom } from '@/lib/supabaseClient';
 
 // Dynamic import ReactPlayer dengan SSR disabled
-const ReactPlayer = dynamic(() => import('react-player'), {
+const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), {
     ssr: false,
     loading: () => (
         <div className="w-full h-full flex items-center justify-center bg-gray-900">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
         </div>
     )
-}) as any;
+});
 
 export default function RoomPage() {
     const params = useParams();
