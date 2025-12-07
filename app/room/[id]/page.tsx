@@ -216,10 +216,10 @@ export default function RoomPage() {
                         </p>
                     </div>
                     <div className={`px-4 py-2 rounded font-bold text-sm flex items-center gap-2 ${status === 'connected'
-                            ? 'bg-green-600'
-                            : status === 'connecting'
-                                ? 'bg-yellow-600 animate-pulse'
-                                : 'bg-red-600'
+                        ? 'bg-green-600'
+                        : status === 'connecting'
+                            ? 'bg-yellow-600 animate-pulse'
+                            : 'bg-red-600'
                         }`}>
                         {status === 'connected' && '✓ READY'}
                         {status === 'connecting' && '⟳ CONNECTING...'}
@@ -306,7 +306,7 @@ export default function RoomPage() {
                 <div className="relative aspect-video bg-black rounded-lg overflow-hidden border border-gray-800 shadow-2xl">
                     {url ? (
                         <div className="w-full h-full">
-                            <ReactPlayer
+                            <VideoPlayer
                                 ref={playerRef}
                                 url={url}
                                 width="100%"
@@ -329,7 +329,7 @@ export default function RoomPage() {
                                             showinfo: 0,
                                             origin: typeof window !== 'undefined' ? window.location.origin : undefined
                                         }
-                                    } as any
+                                    }
                                 }}
                             />
                             {/* Error State */}
