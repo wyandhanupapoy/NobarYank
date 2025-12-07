@@ -7,14 +7,14 @@ import { useSync } from '@/hooks/useSync';
 import { sendSignal, subscribeToRoom } from '@/lib/supabaseClient';
 
 // Dynamic import ReactPlayer dengan SSR disabled
-const ReactPlayer = dynamic(() => import('react-player/youtube'), {
+const ReactPlayer = dynamic(() => import('react-player'), {
     ssr: false,
     loading: () => (
         <div className="w-full h-full flex items-center justify-center bg-gray-900">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
         </div>
     )
-});
+}) as any;
 
 export default function RoomPage() {
     const params = useParams();
@@ -329,7 +329,7 @@ export default function RoomPage() {
                                             showinfo: 0,
                                             origin: typeof window !== 'undefined' ? window.location.origin : undefined
                                         }
-                                    }
+                                    } as any
                                 }}
                             />
                             {/* Error State */}

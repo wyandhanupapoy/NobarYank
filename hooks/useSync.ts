@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import ReactPlayer from 'react-player';
+
 
 const DRIFT_THRESHOLD = 0.5;
 
 export const useSync = (
     isHost: boolean,
     sendData: (data: any) => void,
-    playerRef: React.RefObject<ReactPlayer | null>,
+    playerRef: React.RefObject<any | null>,
     isPlaying: boolean
 ) => {
     const [url, setUrl] = useState<string>('');
