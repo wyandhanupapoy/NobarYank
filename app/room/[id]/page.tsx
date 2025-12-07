@@ -331,7 +331,7 @@ export default function RoomPage() {
                                             modestbranding: 1,
                                             rel: 0,
                                             showinfo: 0,
-                                            origin: typeof window !== 'undefined' ? window.location.origin : undefined
+                                            // origin: typeof window !== 'undefined' ? window.location.origin : undefined
                                         }
                                     }
                                 }}
