@@ -1,4 +1,4 @@
-/** @type {import('./syncwatch/node_modules/next').NextConfig} */
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   async headers() {
     return [];
