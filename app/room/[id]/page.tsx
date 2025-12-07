@@ -388,7 +388,7 @@ export default function RoomPage() {
                         </div>
                     )}
 
-                    {status !== 'connected' && url && !playerError && (
+                    {status !== 'connected' && !isHost && url && !playerError && (
                         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20">
                             <div className="text-center">
                                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-3"></div>
