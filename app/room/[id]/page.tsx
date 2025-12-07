@@ -7,6 +7,7 @@ import { useSync } from '@/hooks/useSync';
 import { sendSignal, subscribeToRoom } from '@/lib/supabaseClient';
 
 // Dynamic import ReactPlayer dengan SSR disabled
+// Dynamic import VideoPlayer dengan SSR disabled
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), {
     ssr: false,
     loading: () => (
@@ -14,7 +15,7 @@ const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
         </div>
     )
-});
+}) as any;
 
 export default function RoomPage() {
     const params = useParams();
@@ -306,6 +307,9 @@ export default function RoomPage() {
                 <div className="relative aspect-video bg-black rounded-lg overflow-hidden border border-gray-800 shadow-2xl">
                     {url ? (
                         <div className="w-full h-full">
+                            <div className="absolute top-0 left-0 bg-red-500 text-white text-xs z-50 p-1">
+                                DEBUG: Rendering Player. URL: {url}
+                            </div>
                             <VideoPlayer
                                 ref={playerRef}
                                 url={url}
